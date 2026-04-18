@@ -24,7 +24,7 @@ Le système repose sur un script Shelly unique qui :
 - `switch:0` : compresseur
 - `switch:1` : chauffage
 - MQTT : état, mode, défauts, fraîcheur capteurs
-- MQTT Discovery Home Assistant (retained) : publication au boot des entités humidifier/sensor/binary_sensor
+- MQTT Discovery Home Assistant (retained) : publication depuis la boucle uniquement quand MQTT est connecté, avec retry jusqu'au premier succès
 
 ### Commandes MQTT (minimales)
 
@@ -35,6 +35,12 @@ Le système repose sur un script Shelly unique qui :
   - `off` => `STATE.enabled=false`
   - `auto` => `STATE.enabled=true`
 - `.../set/target_humidity` :
+  - payload numérique accepté seulement en plage `0..100`
+  - sinon ignoré sans effet de bord
+- `.../mode/set` :
+  - `1` => `STATE.enabled=true`
+  - `0` => `STATE.enabled=false`
+- `.../target/set` :
   - payload numérique accepté seulement en plage `0..100`
   - sinon ignoré sans effet de bord
 
