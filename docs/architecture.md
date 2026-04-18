@@ -28,6 +28,9 @@ Le système repose sur un script Shelly unique qui :
 
 ### Commandes MQTT (minimales)
 
+- `.../set/power` :
+  - `ON` => `STATE.enabled=true`
+  - `OFF` => `STATE.enabled=false`
 - `.../set/mode` :
   - `off` => `STATE.enabled=false`
   - `auto` => `STATE.enabled=true`

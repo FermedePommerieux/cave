@@ -24,6 +24,10 @@ Objet HA (identifiant logique) : `cave_saucisson`
 
 ### 3) Commandes Home Assistant humidifier
 
+- Topic power : `fdp_communs_cave_saucissons/cave_saucisson/set/power`
+  - Payloads valides : `ON`, `OFF`
+  - `ON` => active le contrôleur (`enabled=true`)
+  - `OFF` => désactive le contrôleur (`enabled=false`)
 - Topic mode : `fdp_communs_cave_saucissons/cave_saucisson/set/mode`
   - Payloads valides : `off`, `auto`
   - `off` => désactive le contrôleur (`enabled=false`)
@@ -125,3 +129,24 @@ Sémantique humidité explicite :
 - `PLATE_SENSOR_MISSING` : froid interdit (chauffage toujours borné par règles température).
 - `EXTERNAL_TEMP_STALE` : info, fallback air local.
 - `EXTERNAL_HUMIDITY_STALE` : info, mode température seule.
+
+
+## Home Assistant MQTT Discovery (entités publiées)
+
+Les configs Discovery retained sont publiées sous:
+`homeassistant/<component>/cave_saucisson_<entity_key>/config`
+
+- `humidifier`
+  - `cave_saucisson_humidifier`
+
+- `sensor`
+  - `air_temperature`, `plate_temperature`, `control_temperature`
+  - `humidity`, `target_humidity`, `dew_point`, `plate_target`, `overshoot`, `last_min_plate_after_stop`
+  - `learned_max_runtime`, `lockout_remaining`
+  - `machine_state`, `cool_reason`, `heat_reason`, `drying_block_reason`, `humidity_mode`, `cycle_stop_reason`, `last_plate_event`, `last_post_cool_finalize_reason`, `fault`
+
+- `binary_sensor`
+  - `post_cool_active`, `plate_too_cold_latch`, `drying_overtemp_suspend`, `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `cool_on`, `heat_on`, `enabled`
+
+Nettoyage de compatibilité: publication retained vide sur
+`homeassistant/climate/cave_saucisson_climate/config` pour supprimer une ancienne entité climate si elle existe.
