@@ -4,6 +4,14 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.2] - 2026-04-18
+
+### Changed
+- Discovery MQTT Home Assistant corrigé pour l'entité `humidifier` avec `command_topic` (`set/power`) + `payload_on/off`, tout en conservant `mode` (`off|auto`) et la cible d'humidité.
+- Publication Discovery complétée pour toutes les télémétries actuelles `sensor` et `binary_sensor` exposées dans le JSON `state`.
+- Ajout de la commande MQTT `set/power` (`ON|OFF`) en complément de `set/mode` (`off|auto`) pour un contrôle HA explicite de `enabled`.
+- Ajout d'un nettoyage de compatibilité via publication retained vide sur `homeassistant/climate/<haObjectId>_climate/config`.
+
 ## [0.2.1] - 2026-04-18
 
 ### Added
