@@ -31,6 +31,7 @@ Objet HA (identifiant logique) : `cave_saucisson`
 - Champs clés publiés :
   - `machine_state` : `IDLE|COOLING|POST_COOL_INERTIA|HEATING|DRYING_ACTIVE|FAULT`
   - `cool_reason`, `heat_reason`
+  - `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`
   - `dew_point_c`, `plate_target_c`
   - `cycle_stop_reason`, `last_plate_event`, `last_post_cool_finalize_reason`, `last_min_plate_after_stop_c`, `overshoot_c`
   - `learned_max_runtime_s`
@@ -51,6 +52,11 @@ Payload JSON (exemple) :
   "plate_c": 5.4,
   "control_temp_c": 12.0,
   "humidity_rh": 81.0,
+  "humidity_control_available": true,
+  "humidity_demand_active": true,
+  "drying_mode_requested": true,
+  "drying_block_reason": "none",
+  "humidity_mode": "external_valid",
   "dew_point_c": 8.9,
   "plate_target_c": 7.9,
   "cool_on": true,
@@ -65,6 +71,14 @@ Payload JSON (exemple) :
   "fault": "none"
 }
 ```
+
+Sémantique humidité explicite :
+
+- `humidity_control_available` : humidité externe exploitable (`true`) ou non (`false`).
+- `humidity_demand_active` : demande séchage active selon hystérésis RH.
+- `drying_mode_requested` : conditions DRYING remplies avant arbitrages de priorité globaux.
+- `drying_block_reason` : `none|humidity_stale|below_rh_off|overtemp_suspend|no_plate_target`.
+- `humidity_mode` : `external_valid|external_stale|not_available`.
 
 ### 2) Défauts / événements
 
