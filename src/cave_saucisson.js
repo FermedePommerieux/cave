@@ -317,7 +317,22 @@ function controlLoop() {
     STATE.heatReason = "air_sensor_missing";
     applyOutputs(false, false, false, "air_missing", null, plateC, ts, false);
     publishFault("AIR_SENSOR_MISSING", "critical", "Local air sensor unavailable; outputs forced off");
-    publishState(ts, airC, plateC, null, null, null, "temp_only", null, false);
+    publishState(
+      ts,
+      airC,
+      plateC,
+      null,
+      null,
+      null,
+      "temp_only",
+      null,
+      false,
+      false,
+      false,
+      false,
+      "humidity_stale",
+      "not_available"
+    );
     return;
   }
 
@@ -384,6 +399,28 @@ function controlLoop() {
     } else {
       dryingDemand = humidityRh >= CONFIG.rhOn;
     }
+  }
+
+  // Télémétrie humidité explicite (sans impact décisionnel).
+  var humidityControlAvailable = extHumOk;
+  var humidityDemandActive = dryingDemand;
+  var dryingModeRequested = dryingDemand && extHumOk && isFiniteNumber(plateTargetC);
+  var humidityMode = "not_available";
+  if (extHumOk) {
+    humidityMode = "external_valid";
+  } else if (isFiniteNumber(STATE.externalHumidityRh)) {
+    humidityMode = "external_stale";
+  }
+
+  var dryingBlockReason = "none";
+  if (!extHumOk) {
+    dryingBlockReason = "humidity_stale";
+  } else if (STATE.dryingOvertempSuspend) {
+    dryingBlockReason = "overtemp_suspend";
+  } else if (!dryingDemand) {
+    dryingBlockReason = "no_humidity_request";
+  } else if (!isFiniteNumber(plateTargetC)) {
+    dryingBlockReason = "no_plate_target";
   }
 
   var nextState = MACHINE.IDLE;
@@ -500,10 +537,40 @@ function controlLoop() {
   STATE.heatReason = heatReason;
 
   applyOutputs(wantCool, wantHeat, allowSimultaneous, nextState + ":" + coolReason + ":" + heatReason, plateTargetC, plateC, ts, true);
-  publishState(ts, airC, plateC, controlTempC, humidityRh, dewC, mode, plateTargetC, allowSimultaneous);
+  publishState(
+    ts,
+    airC,
+    plateC,
+    controlTempC,
+    humidityRh,
+    dewC,
+    mode,
+    plateTargetC,
+    allowSimultaneous,
+    humidityControlAvailable,
+    humidityDemandActive,
+    dryingModeRequested,
+    dryingBlockReason,
+    humidityMode
+  );
 }
 
-function publishState(ts, airC, plateC, controlTempC, humidityRh, dewC, mode, plateTargetC, allowSimultaneous) {
+function publishState(
+  ts,
+  airC,
+  plateC,
+  controlTempC,
+  humidityRh,
+  dewC,
+  mode,
+  plateTargetC,
+  allowSimultaneous,
+  humidityControlAvailable,
+  humidityDemandActive,
+  dryingModeRequested,
+  dryingBlockReason,
+  humidityMode
+) {
   if ((ts - STATE.lastPublishedAt) * 1000 < CONFIG.mqttPublishMs) return;
   STATE.lastPublishedAt = ts;
 
@@ -518,6 +585,11 @@ function publishState(ts, airC, plateC, controlTempC, humidityRh, dewC, mode, pl
     plate_c: plateC,
     control_temp_c: controlTempC,
     humidity_rh: humidityRh,
+    humidity_control_available: humidityControlAvailable,
+    humidity_demand_active: humidityDemandActive,
+    drying_mode_requested: dryingModeRequested,
+    drying_block_reason: dryingBlockReason,
+    humidity_mode: humidityMode,
     dew_point_c: dewC,
     plate_target_c: plateTargetC,
     external_temp_fresh: externalTempFresh(ts),
