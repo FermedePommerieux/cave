@@ -148,6 +148,98 @@ function mqttPublish(subTopic, obj) {
   MQTT.publish(fullTopic, JSON.stringify(obj), 0, false);
 }
 
+function mqttPublishRetained(topic, obj) {
+  if (typeof MQTT === "undefined") return;
+  MQTT.publish(topic, JSON.stringify(obj), 0, true);
+}
+
+function haDeviceInfo() {
+  return {
+    identifiers: [CONFIG.haObjectId],
+    name: "Cave Saucisson Controller",
+    manufacturer: "Custom",
+    model: "Shelly Script"
+  };
+}
+
+function publishDiscoveryConfig(component, entityKey, payload) {
+  var discoveryTopic = "homeassistant/" + component + "/" + CONFIG.haObjectId + "_" + entityKey + "/config";
+  var merged = {
+    unique_id: CONFIG.haObjectId + "_" + entityKey,
+    device: haDeviceInfo()
+  };
+  var k;
+  for (k in payload) merged[k] = payload[k];
+  mqttPublishRetained(discoveryTopic, merged);
+}
+
+function publishAllDiscoveryConfigs() {
+  var stateTopic = CONFIG.mqttPrefix + "/" + CONFIG.haObjectId + "/state";
+  var baseTopic = CONFIG.mqttPrefix + "/" + CONFIG.haObjectId;
+  var i;
+  var sensors = [
+    { key: "air_temperature", name: "Cave Air Temperature", field: "air_c", device_class: "temperature", unit: "°C" },
+    { key: "plate_temperature", name: "Cave Plate Temperature", field: "plate_c", device_class: "temperature", unit: "°C" },
+    { key: "control_temperature", name: "Cave Control Temperature", field: "control_temp_c", device_class: "temperature", unit: "°C" },
+    { key: "dew_point", name: "Cave Dew Point", field: "dew_point_c", device_class: "temperature", unit: "°C" },
+    { key: "plate_target", name: "Cave Plate Target", field: "plate_target_c", device_class: "temperature", unit: "°C" },
+    { key: "humidity", name: "Cave Humidity", field: "humidity_rh", device_class: "humidity", unit: "%" },
+    { key: "target_humidity", name: "Cave Target Humidity", field: "target_humidity_rh", device_class: "humidity", unit: "%" },
+    { key: "learned_max_runtime", name: "Cave Learned Max Runtime", field: "learned_max_runtime_s", unit: "s" },
+    { key: "overshoot", name: "Cave Plate Overshoot", field: "overshoot_c", unit: "°C" },
+    { key: "lockout_remaining", name: "Cave Lockout Remaining", field: "lockout_remaining_s", unit: "s" },
+    { key: "last_min_plate_after_stop", name: "Cave Last Min Plate After Stop", field: "last_min_plate_after_stop_c", device_class: "temperature", unit: "°C" },
+    { key: "machine_state", name: "Cave Machine State", field: "machine_state" },
+    { key: "cool_reason", name: "Cave Cool Reason", field: "cool_reason" },
+    { key: "heat_reason", name: "Cave Heat Reason", field: "heat_reason" },
+    { key: "drying_block_reason", name: "Cave Drying Block Reason", field: "drying_block_reason" },
+    { key: "humidity_mode", name: "Cave Humidity Mode", field: "humidity_mode" },
+    { key: "fault", name: "Cave Fault", field: "fault" }
+  ];
+  var binarySensors = [
+    { key: "post_cool_active", name: "Cave Post Cool Active", field: "post_cool_active" },
+    { key: "plate_too_cold_latch", name: "Cave Plate Too Cold Latch", field: "plate_too_cold_latch" },
+    { key: "drying_overtemp_suspend", name: "Cave Drying Overtemp Suspend", field: "drying_overtemp_suspend" },
+    { key: "humidity_control_available", name: "Cave Humidity Control Available", field: "humidity_control_available" },
+    { key: "drying_mode_requested", name: "Cave Drying Mode Requested", field: "drying_mode_requested" }
+  ];
+
+  publishDiscoveryConfig("humidifier", "humidifier", {
+    name: "Cave Humidifier",
+    state_topic: stateTopic,
+    mode_state_topic: stateTopic,
+    mode_state_template: "{% if value_json.enabled %}auto{% else %}off{% endif %}",
+    mode_command_topic: baseTopic + "/set/mode",
+    modes: ["off", "auto"],
+    current_humidity_topic: stateTopic,
+    current_humidity_template: "{{ value_json.humidity_rh }}",
+    target_humidity_state_topic: stateTopic,
+    target_humidity_state_template: "{{ value_json.target_humidity_rh }}",
+    target_humidity_command_topic: baseTopic + "/set/target_humidity"
+  });
+
+  for (i = 0; i < sensors.length; i++) {
+    var s = {
+      name: sensors[i].name,
+      state_topic: stateTopic,
+      value_template: "{{ value_json." + sensors[i].field + " }}"
+    };
+    if (sensors[i].device_class) s.device_class = sensors[i].device_class;
+    if (sensors[i].unit) s.unit_of_measurement = sensors[i].unit;
+    publishDiscoveryConfig("sensor", sensors[i].key, s);
+  }
+
+  for (i = 0; i < binarySensors.length; i++) {
+    publishDiscoveryConfig("binary_sensor", binarySensors[i].key, {
+      name: binarySensors[i].name,
+      state_topic: stateTopic,
+      value_template: "{{ value_json." + binarySensors[i].field + " }}",
+      payload_on: true,
+      payload_off: false
+    });
+  }
+}
+
 function publishFault(code, severity, message) {
   STATE.lastFaultCode = code;
   mqttPublish("fault", {
@@ -576,6 +668,7 @@ function publishState(
 
   mqttPublish("state", {
     enabled: STATE.enabled,
+    target_humidity_rh: STATE.humiditySetpointRh,
     mode: mode,
     machine_state: STATE.machineState,
     cool_reason: STATE.coolReason,
@@ -614,6 +707,7 @@ function publishState(
 
 function mqttInit() {
   if (typeof MQTT === "undefined") return;
+  var baseTopic = CONFIG.mqttPrefix + "/" + CONFIG.haObjectId;
 
   MQTT.subscribe(CONFIG.externalTempTopic, function (topic, payload) {
     var n = parseNumericPayload(payload);
@@ -628,11 +722,26 @@ function mqttInit() {
     STATE.externalHumidityRh = n;
     STATE.externalHumidityTs = nowS();
   });
+
+  MQTT.subscribe(baseTopic + "/set/mode", function (topic, payload) {
+    if (payload === "off") {
+      STATE.enabled = false;
+    } else if (payload === "auto") {
+      STATE.enabled = true;
+    }
+  });
+
+  MQTT.subscribe(baseTopic + "/set/target_humidity", function (topic, payload) {
+    var n = parseNumericPayload(payload);
+    if (!isFiniteNumber(n) || n < 0 || n > 100) return;
+    STATE.humiditySetpointRh = n;
+  });
 }
 
 function bootstrap() {
   applyOutputs(false, false, false, "boot_safe", null, null, nowS(), false);
   mqttInit();
+  publishAllDiscoveryConfigs();
   Timer.set(CONFIG.loopMs, true, controlLoop);
   publishFault("BOOT", "info", "Controller started");
 }
