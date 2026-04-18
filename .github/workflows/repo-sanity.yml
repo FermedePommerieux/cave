@@ -1,0 +1,30 @@
+name: Repo sanity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required files
+        run: |
+          set -eu
+          test -f README.md
+          test -f AGENTS.md
+          test -f src/cave_saucisson.js
+          test -f docs/architecture.md
+          test -f docs/commissioning.md
+          test -f docs/mqtt-topics.md
+
+      - name: Ensure single runtime script
+        run: |
+          set -eu
+          count=$(find src -maxdepth 1 -type f -name '*.js' | wc -l)
+          test "$count" -eq 1
