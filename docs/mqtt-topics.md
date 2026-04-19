@@ -121,6 +121,26 @@ Sémantique humidité explicite :
 - Topic de vérité unique pour les entités : `fdp_communs_cave_saucissons/cave_saucisson/state`
 - Les entités extraient leurs champs via `value_template`/`*_template`.
 
+Compatibilité robuste appliquée:
+- payloads discovery nettoyés des champs `null`/`undefined`
+- binary_sensor avec `payload_on="true"` et `payload_off="false"` (pas de booléens JSON bruts)
+- capteurs numériques avec `value_template` défensif : `{{ value_json.<champ> | default(none) }}`
+
+### Procédure de purge retained discovery (avant redéploiement)
+
+Quand HA a déjà appris des payloads discovery invalides, il faut supprimer les retained `homeassistant/.../config` puis republier.
+
+1. Arrêter le script Shelly.
+2. Purger les topics retained discovery du contrôleur :
+
+```bash
+mosquitto_pub -h <BROKER_HOST> -t "homeassistant/+/cave_saucisson_+/config" -n -r
+```
+
+3. (Optionnel mais recommandé) redémarrer Home Assistant pour vider son cache runtime MQTT Discovery.
+4. Redémarrer le script Shelly pour republier tous les payloads discovery propres.
+5. Vérifier l'absence d'erreurs `Unable to parse JSON ...` dans les logs HA.
+
 ## États et défauts principaux
 
 - `AIR_SENSOR_MISSING` : état `FAULT` et arrêt immédiat de tous les actionneurs.

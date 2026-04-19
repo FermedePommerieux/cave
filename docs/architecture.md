@@ -26,6 +26,12 @@ Le système repose sur un script Shelly unique qui :
 - MQTT : état, mode, défauts, fraîcheur capteurs
 - MQTT Discovery Home Assistant (retained) : publication au boot des entités humidifier (`device_class=dehumidifier`)/sensor/binary_sensor
 
+Contraintes de robustesse discovery Home Assistant:
+- publication en JSON strict uniquement
+- pas de champs `null`/`undefined` dans les payloads `.../config`
+- capteurs booléens publiés en binary_sensor avec mapping explicite `payload_on="true"` / `payload_off="false"`
+- templates discovery défensifs (`default(none)` pour numériques) pour éviter des états `unknown` cassants côté HA
+
 ### Commandes MQTT (minimales)
 
 - `.../set/mode` :

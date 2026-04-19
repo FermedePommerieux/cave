@@ -169,7 +169,11 @@ function publishDiscoveryConfig(component, entityKey, payload) {
     device: haDeviceInfo()
   };
   var k;
-  for (k in payload) merged[k] = payload[k];
+  for (k in payload) {
+    if (typeof payload[k] !== "undefined" && payload[k] !== null) {
+      merged[k] = payload[k];
+    }
+  }
   mqttPublishRetained(discoveryTopic, merged);
 }
 
@@ -185,9 +189,9 @@ function publishAllDiscoveryConfigs() {
     { key: "plate_target", name: "Cave Plate Target", field: "plate_target_c", device_class: "temperature", unit: "°C" },
     { key: "humidity", name: "Cave Humidity", field: "humidity_rh", device_class: "humidity", unit: "%" },
     { key: "target_humidity", name: "Cave Target Humidity", field: "target_humidity_rh", device_class: "humidity", unit: "%" },
-    { key: "learned_max_runtime", name: "Cave Learned Max Runtime", field: "learned_max_runtime_s", unit: "s" },
+    { key: "learned_max_runtime", name: "Cave Learned Max Runtime", field: "learned_max_runtime_s", unit: "s", device_class: "duration" },
     { key: "overshoot", name: "Cave Plate Overshoot", field: "overshoot_c", unit: "°C" },
-    { key: "lockout_remaining", name: "Cave Lockout Remaining", field: "lockout_remaining_s", unit: "s" },
+    { key: "lockout_remaining", name: "Cave Lockout Remaining", field: "lockout_remaining_s", unit: "s", device_class: "duration" },
     { key: "last_min_plate_after_stop", name: "Cave Last Min Plate After Stop", field: "last_min_plate_after_stop_c", device_class: "temperature", unit: "°C" },
     { key: "machine_state", name: "Cave Machine State", field: "machine_state" },
     { key: "cool_reason", name: "Cave Cool Reason", field: "cool_reason" },
@@ -227,7 +231,7 @@ function publishAllDiscoveryConfigs() {
     var s = {
       name: sensors[i].name,
       state_topic: stateTopic,
-      value_template: "{{ value_json." + sensors[i].field + " }}"
+      value_template: "{{ value_json." + sensors[i].field + " | default(none) }}"
     };
     if (sensors[i].device_class) s.device_class = sensors[i].device_class;
     if (sensors[i].unit) s.unit_of_measurement = sensors[i].unit;
@@ -238,9 +242,9 @@ function publishAllDiscoveryConfigs() {
     publishDiscoveryConfig("binary_sensor", binarySensors[i].key, {
       name: binarySensors[i].name,
       state_topic: stateTopic,
-      value_template: "{{ value_json." + binarySensors[i].field + " }}",
-      payload_on: true,
-      payload_off: false
+      value_template: "{{ value_json." + binarySensors[i].field + " | string | lower }}",
+      payload_on: "true",
+      payload_off: "false"
     });
   }
 }
