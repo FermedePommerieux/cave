@@ -31,6 +31,8 @@ Contraintes de robustesse discovery Home Assistant:
 - pas de champs `null`/`undefined` dans les payloads `.../config`
 - capteurs booléens publiés en binary_sensor avec mapping explicite `payload_on="true"` / `payload_off="false"`
 - templates discovery défensifs (`default(none)` pour numériques) pour éviter des états `unknown` cassants côté HA
+- migration discovery au boot: purge explicite des retained `cave_saucisson` connus (y compris obsolètes), puis republication
+- debug discovery optionnel via topic MQTT dédié (activable par configuration, sans effet sur la régulation)
 
 ### Commandes MQTT (minimales)
 

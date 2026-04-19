@@ -130,16 +130,52 @@ Compatibilité robuste appliquée:
 
 Quand HA a déjà appris des payloads discovery invalides, il faut supprimer les retained `homeassistant/.../config` puis republier.
 
+> Important : `mosquitto_pub` **n'accepte pas les wildcards en publication**.  
+> La commande `mosquitto_pub -t "homeassistant/+/cave_saucisson_+/config" -n -r` est donc incorrecte.
+
+Le script applique désormais une migration robuste au boot :
+- purge explicite retained des topics discovery `cave_saucisson` connus (actifs + obsolètes),
+- puis republication propre des payloads JSON valides.
+
+Procédure opérable en conditions réelles (broker déjà pollué) :
+
 1. Arrêter le script Shelly.
-2. Purger les topics retained discovery du contrôleur :
+2. Lister les retained discovery existants du contrôleur :
 
 ```bash
-mosquitto_pub -h <BROKER_HOST> -t "homeassistant/+/cave_saucisson_+/config" -n -r
+mosquitto_sub -h <BROKER_HOST> -t 'homeassistant/#' -F '%t' -C 500 | grep 'cave_saucisson_'
 ```
 
-3. (Optionnel mais recommandé) redémarrer Home Assistant pour vider son cache runtime MQTT Discovery.
-4. Redémarrer le script Shelly pour republier tous les payloads discovery propres.
-5. Vérifier l'absence d'erreurs `Unable to parse JSON ...` dans les logs HA.
+3. Supprimer les retained par topics exacts (exemples minimaux) :
+
+```bash
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_post_cool_active/config' -n -r
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_plate_too_cold_latch/config' -n -r
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_drying_overtemp_suspend/config' -n -r
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_humidity_control_available/config' -n -r
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_drying_mode_requested/config' -n -r
+```
+
+4. (Optionnel) Supprimer aussi d'éventuels topics historiques :
+
+```bash
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/climate/cave_saucisson_climate/config' -n -r
+```
+
+5. Redémarrer le script Shelly pour republier tous les payloads discovery propres.
+6. Vérifier l'absence d'erreurs `Unable to parse JSON ...` dans les logs HA.
+
+### Debug discovery côté broker
+
+Pour diagnostiquer un broker/retained récalcitrant sans toucher à la régulation :
+
+- activer `CONFIG.discoveryDebugEnabled = true`,
+- observer le topic `fdp_communs_cave_saucissons/cave_saucisson/debug/discovery_payload`.
+
+Chaque message contient :
+- `action`: `purge` ou `publish`
+- `discovery_topic`: topic Home Assistant ciblé
+- `payload`: JSON exact envoyé (ou `null` pour purge)
 
 ## États et défauts principaux
 

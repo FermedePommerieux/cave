@@ -48,6 +48,11 @@ Pour maximiser la compatibilité HA:
 - payload discovery généré uniquement en JSON strict (`JSON.stringify`)
 - binary sensors en `payload_on="true"` / `payload_off="false"` (chaînes explicites)
 - templates défensifs avec `default(none)` sur capteurs numériques
+- purge explicite des retained discovery `cave_saucisson` connus au boot (actifs + obsolètes), puis republication propre
+
+Diagnostic broker optionnel (sans impact régulation) :
+- `CONFIG.discoveryDebugEnabled = true` publie les payloads discovery envoyés sur
+  `fdp_communs_cave_saucissons/cave_saucisson/debug/discovery_payload`
 
 Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il faut **purger les retained** puis redémarrer le script (procédure détaillée dans `docs/mqtt-topics.md`).
 

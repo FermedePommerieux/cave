@@ -60,7 +60,10 @@ var CONFIG = {
   postCoolStableWindowS: 60,
 
   loopMs: 5000,
-  mqttPublishMs: 5000
+  mqttPublishMs: 5000,
+  // Migration discovery HA: purge retained + debug optionnel des payloads envoyés.
+  discoveryDebugEnabled: false,
+  discoveryDebugTopicSuffix: "debug/discovery_payload"
 };
 
 var MACHINE = {
@@ -153,6 +156,75 @@ function mqttPublishRetained(topic, obj) {
   MQTT.publish(topic, JSON.stringify(obj), 0, true);
 }
 
+function mqttPublishRetainedEmpty(topic) {
+  if (typeof MQTT === "undefined") return;
+  // Payload retained vide => suppression retained côté broker.
+  MQTT.publish(topic, "", 0, true);
+}
+
+function publishDiscoveryDebug(action, topic, payload) {
+  if (typeof MQTT === "undefined" || !CONFIG.discoveryDebugEnabled) return;
+  var fullTopic = CONFIG.mqttPrefix + "/" + CONFIG.haObjectId + "/" + CONFIG.discoveryDebugTopicSuffix;
+  MQTT.publish(fullTopic, JSON.stringify({
+    action: action,
+    discovery_topic: topic,
+    payload: payload,
+    ts: nowS()
+  }), 0, false);
+}
+
+function discoveryTopic(component, entityKey) {
+  return "homeassistant/" + component + "/" + CONFIG.haObjectId + "_" + entityKey + "/config";
+}
+
+var DISCOVERY_ACTIVE_ENTITIES = [
+  { component: "humidifier", key: "humidifier" },
+  { component: "sensor", key: "air_temperature" },
+  { component: "sensor", key: "plate_temperature" },
+  { component: "sensor", key: "control_temperature" },
+  { component: "sensor", key: "dew_point" },
+  { component: "sensor", key: "plate_target" },
+  { component: "sensor", key: "humidity" },
+  { component: "sensor", key: "target_humidity" },
+  { component: "sensor", key: "learned_max_runtime" },
+  { component: "sensor", key: "overshoot" },
+  { component: "sensor", key: "lockout_remaining" },
+  { component: "sensor", key: "last_min_plate_after_stop" },
+  { component: "sensor", key: "machine_state" },
+  { component: "sensor", key: "cool_reason" },
+  { component: "sensor", key: "heat_reason" },
+  { component: "sensor", key: "drying_block_reason" },
+  { component: "sensor", key: "humidity_mode" },
+  { component: "sensor", key: "fault" },
+  { component: "binary_sensor", key: "post_cool_active" },
+  { component: "binary_sensor", key: "plate_too_cold_latch" },
+  { component: "binary_sensor", key: "drying_overtemp_suspend" },
+  { component: "binary_sensor", key: "humidity_control_available" },
+  { component: "binary_sensor", key: "drying_mode_requested" }
+];
+
+var DISCOVERY_OBSOLETE_ENTITIES = [
+  // Ancienne entité historique à purger.
+  { component: "climate", key: "climate" }
+];
+
+function purgeDiscoveryConfigs() {
+  var topics = {};
+  var i;
+
+  for (i = 0; i < DISCOVERY_ACTIVE_ENTITIES.length; i++) {
+    topics[discoveryTopic(DISCOVERY_ACTIVE_ENTITIES[i].component, DISCOVERY_ACTIVE_ENTITIES[i].key)] = true;
+  }
+  for (i = 0; i < DISCOVERY_OBSOLETE_ENTITIES.length; i++) {
+    topics[discoveryTopic(DISCOVERY_OBSOLETE_ENTITIES[i].component, DISCOVERY_OBSOLETE_ENTITIES[i].key)] = true;
+  }
+
+  for (var topic in topics) {
+    mqttPublishRetainedEmpty(topic);
+    publishDiscoveryDebug("purge", topic, null);
+  }
+}
+
 function haDeviceInfo() {
   return {
     identifiers: [CONFIG.haObjectId],
@@ -163,7 +235,7 @@ function haDeviceInfo() {
 }
 
 function publishDiscoveryConfig(component, entityKey, payload) {
-  var discoveryTopic = "homeassistant/" + component + "/" + CONFIG.haObjectId + "_" + entityKey + "/config";
+  var topic = discoveryTopic(component, entityKey);
   var merged = {
     unique_id: CONFIG.haObjectId + "_" + entityKey,
     device: haDeviceInfo()
@@ -174,7 +246,8 @@ function publishDiscoveryConfig(component, entityKey, payload) {
       merged[k] = payload[k];
     }
   }
-  mqttPublishRetained(discoveryTopic, merged);
+  publishDiscoveryDebug("publish", topic, merged);
+  mqttPublishRetained(topic, merged);
 }
 
 function publishAllDiscoveryConfigs() {
@@ -750,6 +823,7 @@ function mqttInit() {
 function bootstrap() {
   applyOutputs(false, false, false, "boot_safe", null, null, nowS(), false);
   mqttInit();
+  purgeDiscoveryConfigs();
   publishAllDiscoveryConfigs();
   Timer.set(CONFIG.loopMs, true, controlLoop);
   publishFault("BOOT", "info", "Controller started");
