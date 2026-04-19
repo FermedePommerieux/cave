@@ -4,6 +4,20 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.5] - 2026-04-19
+
+### Fixed
+- Réduction forte de l'empreinte mémoire MQTT Discovery au boot Shelly: profil discovery minimal par défaut (`CONFIG.discoveryExtendedEnabled=false`) avec publication uniquement de l'entité `humidifier` et de 5 capteurs essentiels (`air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`).
+- Suppression par défaut des `binary_sensor` discovery et des capteurs diagnostics secondaires pour éviter les pics mémoire (`out of memory`) en runtime.
+- Simplification de la phase purge/republication discovery: suppression de la déduplication par objet intermédiaire, purge séquentielle frugale des listes connues (minimal + étendu/legacy).
+
+### Added
+- Mode discovery étendu optionnel (`CONFIG.discoveryExtendedEnabled=true`) pour restaurer les entités diagnostics Home Assistant si nécessaire.
+
+### Documentation
+- Documentation mise à jour avec la distinction claire entre mode discovery minimal recommandé sur Shelly et mode étendu optionnel.
+- Recommandation explicite de laisser `CONFIG.discoveryDebugEnabled=false` en production pour sobriété mémoire.
+
 ## [0.2.4] - 2026-04-19
 
 ### Fixed

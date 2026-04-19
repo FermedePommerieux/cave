@@ -24,15 +24,19 @@ Le système repose sur un script Shelly unique qui :
 - `switch:0` : compresseur
 - `switch:1` : chauffage
 - MQTT : état, mode, défauts, fraîcheur capteurs
-- MQTT Discovery Home Assistant (retained) : publication au boot des entités humidifier (`device_class=dehumidifier`)/sensor/binary_sensor
+- MQTT Discovery Home Assistant (retained) : publication au boot
 
 Contraintes de robustesse discovery Home Assistant:
 - publication en JSON strict uniquement
 - pas de champs `null`/`undefined` dans les payloads `.../config`
 - capteurs booléens publiés en binary_sensor avec mapping explicite `payload_on="true"` / `payload_off="false"`
 - templates discovery défensifs (`default(none)` pour numériques) pour éviter des états `unknown` cassants côté HA
-- migration discovery au boot: purge explicite des retained `cave_saucisson` connus (y compris obsolètes), puis republication
-- debug discovery optionnel via topic MQTT dédié (activable par configuration, sans effet sur la régulation)
+- mode discovery minimal par défaut (`CONFIG.discoveryExtendedEnabled=false`) pour sobriété mémoire:
+  - `humidifier` + capteurs essentiels (`air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`)
+  - aucun `binary_sensor` en mode minimal
+- mode discovery étendu optionnel (`CONFIG.discoveryExtendedEnabled=true`) pour observabilité complète
+- migration discovery au boot: purge explicite des retained `cave_saucisson` connus (minimal + étendu/obsolètes), puis republication du profil actif
+- debug discovery optionnel via topic MQTT dédié (`CONFIG.discoveryDebugEnabled=false` par défaut, sans effet sur la régulation)
 
 ### Commandes MQTT (minimales)
 
