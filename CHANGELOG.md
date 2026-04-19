@@ -4,6 +4,18 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.4] - 2026-04-19
+
+### Fixed
+- Migration MQTT Discovery Home Assistant durcie au boot: purge retained explicite des topics `homeassistant/.../cave_saucisson_*/config` connus avant republication, y compris les binary sensors en erreur (`post_cool_active`, `plate_too_cold_latch`, `drying_overtemp_suspend`, `humidity_control_available`, `drying_mode_requested`).
+- Purge d'entités discovery historiques obsolètes ajoutée (`climate` legacy), pour éviter la réapparition d'anciens payloads invalides persistés broker.
+
+### Added
+- Télémétrie de debug discovery optionnelle (`CONFIG.discoveryDebugEnabled`) publiant l'action (`purge|publish`), le topic cible et le payload exact envoyé.
+
+### Documentation
+- Correction de la procédure de purge retained: suppression de la commande `mosquitto_pub` avec wildcard en publication (incorrecte MQTT), remplacée par une procédure par topics exacts + découverte préalable.
+
 ## [0.2.3] - 2026-04-19
 
 ### Fixed
