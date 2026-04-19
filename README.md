@@ -124,8 +124,6 @@ Voir `docs/mqtt-topics.md` pour le détail complet.
 
 Top 6 startup : `machine_state`, `cool_reason`, `heat_reason`, `plate_too_cold_latch`, `post_cool_active`, `fault`.
 
-Visibilité humidité (diagnostic rapide) : `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`.
-
 | Champ | Lecture opérationnelle | Normal attendu | Alerte terrain |
 |---|---|---|---|
 | `machine_state` | état machine courant | alternance `IDLE/COOLING`, `DRYING_ACTIVE` seulement RH haute | bloqué en `FAULT` ou `POST_COOL_INERTIA` trop long |
