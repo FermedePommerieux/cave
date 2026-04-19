@@ -9,7 +9,7 @@ Maintenir des conditions stables pour l'affinage en donnant la priorité à la s
 - température cible de cave (consigne par défaut 12.0 °C)
 - plafond ambiance à 14.0 °C si possible
 - prévention du gel (plaque froide)
-- simultané chauffage + froid interdit sauf en mode séchage actif
+- jamais chauffage et froid simultanés
 - déshumidification uniquement par condensation sur plaque froide
 - mode dégradé automatique si capteurs MQTT externes invalides
 
@@ -19,10 +19,25 @@ Maintenir des conditions stables pour l'affinage en donnant la priorité à la s
 - 2 sorties relais :
   - `switch:0` = compresseur froid
   - `switch:1` = chauffage (lampe/résistance)
-- 2 sondes locales de température :
+- 2 sondes locales de température (Shelly Add-on / périphériques compatibles)
   - `temperature:100` = air cave
   - `temperature:101` = plaque froide
 - Broker MQTT (optionnel mais recommandé)
+
+## Capteurs / actionneurs
+
+### Entrées
+
+- Température air locale (obligatoire)
+- Température plaque locale (obligatoire pour régulation froide sûre)
+- Température externe MQTT (optionnelle, fallback sur sonde air locale)
+- Humidité externe MQTT (optionnelle, sinon mode température seule)
+
+### Sorties
+
+- Relais froid (compresseur)
+- Relais chauffage
+- Télémétrie MQTT d'état et de défauts
 
 ## Topics MQTT
 
@@ -31,115 +46,55 @@ Voir `docs/mqtt-topics.md` pour le détail complet.
 - Consommés :
   - `fdp_communs_cave_saucissons/thermostat/external_temperature`
   - `fdp_communs_cave_saucissons/thermostat/external_humidity`
-- Publiés :
+- Publiés (exemples) :
   - `fdp_communs_cave_saucissons/cave_saucisson/state`
   - `fdp_communs_cave_saucissons/cave_saucisson/fault`
 
-## Déploiement rapide
+## Fonctionnement général
 
-1. Copier `src/cave_saucisson.js` dans l'éditeur de script Shelly.
-2. Ajuster `CONFIG` (IDs capteurs/relais + seuils).
-3. Activer MQTT côté Shelly si utilisé.
-4. Démarrer le script.
-5. Vérifier immédiatement `state` et `fault`.
+1. Lecture des sondes locales.
+2. Mise à jour éventuelle des mesures externes MQTT.
+3. Vérifications de sécurité :
+   - air locale indisponible => arrêt actionneurs + défaut
+   - plaque trop froide => froid interdit jusqu'à reprise
+4. Décision de mode :
+   - humidité externe valide => mode thermo + déshumidification par froid
+   - humidité invalide/périmée => mode température seule
+5. Application des commandes avec inter-verrouillage strict froid/chauffage.
 
----
+## Modes
 
-## Guide de tuning terrain (pratique)
+### Mode normal
 
-### Ordre conseillé
+- Température pilotée avec hystérésis.
+- Déshumidification possible uniquement si humidité externe valide et au-dessus du seuil.
 
-1. **First-start (obligatoire)** : `plateMinOffC`, `plateMinResumeC`, `lockoutS`, `hardMaxAirC`, `dryingResumeBelowHardMaxC`.
-2. **Régulation de base** : `coolOnC`, `coolOffC`, `heatOnC`, `heatOffC`, `heatDisableAboveC`.
-3. **Séchage** : `rhOn`, `rhOff`, `dewTargetMarginC`, `plateTargetHysteresisC`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
-4. **Affinage avancé compresseur** : `adaptiveCool*`, `inertia*`, `postCool*`.
+### Mode fallback
 
-> Règle simple: ne modifier qu'un groupe à la fois, puis observer au moins 24h de cycles.
+- Température externe invalide/périmée => utilisation de la température air locale.
+- Humidité externe invalide/périmée => désactivation de la déshumidification pilotée.
+- Sonde air locale absente => arrêt sécurisé.
 
-### Thermique (air cave)
+## Déploiement sur Shelly
 
-| Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
-|---|---:|---|---|---|---|---|---|
-| `coolOnC` | 13.0 | Seuil de démarrage froid | cave reste chaude avant démarrage | démarrages froid trop tardifs | surchauffe d'air | cycles trop fréquents | High |
-| `coolOffC` | 11.5 | Seuil d'arrêt froid | froid coupe trop tôt | froid descend trop bas | sur-refroidissement plaque/air | compresseur trop court-cyclé | High |
-| `heatOnC` | 10.5 | Démarrage chauffage protection | air descend trop bas sans chauffe | chauffe trop fréquente | chauffage inutile | sous-température cave | Medium |
-| `heatOffC` | 11.5 | Arrêt chauffage protection | chauffe trop courte inefficace | chauffe trop longue | air trop chaud | oscillations chauffage | Medium |
-| `heatDisableAboveC` | 13.5 | Blocage chauffage si air déjà chaud | chauffe intervient encore trop haut | chauffe jamais utile en période froide | conflit thermique inutile | protection basse T trop tardive | High |
+1. Copier le contenu de `src/cave_saucisson.js`.
+2. Ouvrir l'interface Shelly > Scripts > Nouveau script.
+3. Coller le script et sauvegarder.
+4. Ajuster la section `CONFIG` si nécessaire (IDs sondes/relais, topics).
+5. Activer MQTT côté Shelly si utilisé.
+6. Démarrer le script et surveiller les topics `state`/`fault`.
 
-### Humidité / séchage assisté
+## Configuration
 
-| Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
-|---|---:|---|---|---|---|---|---|
-| `rhOn` | 80.0 | Entrée `DRYING_ACTIVE` | séchage démarre trop souvent | RH reste haute trop longtemps | séchage sous-utilisé | séchage trop fréquent | High |
-| `rhOff` | 77.0 | Sortie/maintien `DRYING_ACTIVE` | sortie trop tardive | mode sèche trop longtemps | cycles DRYING longs | pompage entrée/sortie | High |
-| `dewTargetMarginC` | 1.0 | Cible plaque sous point de rosée | condensation insuffisante | plaque trop froide/overshoot | risque gel/overshoot | déshumidification faible | High |
-| `plateTargetHysteresisC` | 0.6 | Hystérésis ON/OFF compresseur en DRYING | compresseur commute trop vite | plateau trop large | humidité moins tenue finement | court-cyclage | Medium |
-| `dryingAirSetpointC` | 12.0 | Consigne air du chauffage en DRYING | air trop froid en DRYING | air trop chaud en DRYING | chauffe excessive | séchage inefficace | Medium |
-| `dryingAirHysteresisC` | 0.6 | Bande ON/OFF chauffage en DRYING | chauffage commute trop vite | oscillation air notable | fluctuations air | usure relais chauffe | Low |
+Toute la configuration est regroupée en tête de script dans un objet `CONFIG`.
 
-### Sécurité plaque
+Paramètres principaux :
 
-| Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
-|---|---:|---|---|---|---|---|---|
-| `plateMinOffC` | 0.0 | Coupure froid anti-gel | plaque approche 0 trop souvent | protection coupe trop tôt | déshumidification limitée | gel plaque possible | **High / Safety** |
-| `plateMinResumeC` | 3.0 | Température de reprise après latch | reprise trop rapide à plaque encore froide | reprise trop tardive | arrêts froid longs | reprises agressives | **High / Safety** |
-
-### Protection compresseur / apprentissage runtime
-
-| Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
-|---|---:|---|---|---|---|---|---|
-| `lockoutS` | 180 | Délai mini entre démarrages | redémarrages trop serrés | temps mort trop long | régulation lente | short-cycle compresseur | **High / Safety** |
-| `adaptiveCoolMaxInitialS` | 240 | Limite initiale cycle froid | cycles coupés trop tôt au démarrage | overshoot initial fort | cycles initiaux trop longs | apprentissage trop lent | Medium |
-| `adaptiveCoolMaxMinS` | 120 | borne basse runtime appris | runtime tombe trop bas et coupe trop vite | besoin cycles plus courts protégés | cycles trop longs mini | runtime inutilement court | Medium |
-| `adaptiveCoolMaxMaxS` | 480 | borne haute runtime appris | runtime plafonne trop bas | cycles longs dangereux | sur-refroidissement | ne peut pas tenir charge | Medium |
-| `adaptiveCoolOvershootStepDownS` | 30 | réduction runtime si overshoot >2°C | overshoot persiste plusieurs cycles | runtime chute trop brutalement | apprentissage lent | instabilité/coupures fréquentes | Low |
-
-### Inertie post-arrêt (apprentissage overshoot)
-
-| Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
-|---|---:|---|---|---|---|---|---|
-| `inertiaMaxS` | 420 | timeout dur observation post-cool | inertie réelle non captée à temps | sortie inertie trop tardive | blocage prolongé en `POST_COOL_INERTIA` | minima post-stop ratés | Medium |
-| `inertiaRiseFinishDeltaC` | 0.2 | sortie rapide quand plaque remonte de +delta | sortie trop précoce | sortie trop tardive | fin inertie tardive | mesure minima incomplète | Medium |
-| `postCoolMinDeltaC` | 0.05 | seuil “nouveau minimum significatif” | bruit capteur déclenche faux minima | minima réels ignorés | inertie trop longue | apprentissage appauvri | Low |
-| `postCoolStableWindowS` | 60 | sortie si plus de nouveau mini significatif | trop de bruit lente sortie | sortie trop lente | temps OFF excessif | sortie prématurée | Low |
-
-### Protection ambiance (priorité sur séchage)
-
-| Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
-|---|---:|---|---|---|---|---|---|
-| `hardMaxAirC` | 14.0 | suspend DRYING et force protection ambiance | air monte trop haut avant override | override trop fréquent | surchauffe cave avant action | DRYING trop souvent suspendu | **High / Safety** |
-| `dryingResumeBelowHardMaxC` | 13.5 | hystérésis de reprise DRYING | reprise DRYING trop rapide après surchauffe | reprise trop tardive | DRYING bloqué trop longtemps | bascule DRYING trop agressive | High |
-
-### Réponses rapides aux problèmes terrain
-
-- **“La plaque overshoot trop”**: vérifier d'abord `dewTargetMarginC`, puis `adaptiveCoolOvershootStepDownS`, puis `inertiaRiseFinishDeltaC` / `postCoolStableWindowS`.
-- **“Séchage trop faible”**: vérifier d'abord validité RH MQTT, puis `rhOn/rhOff`, puis `dewTargetMarginC` (trop faible) et blocage `plate_too_cold_latch`.
-- **“Reprise DRYING trop agressive après surchauffe”**: augmenter `dryingResumeBelowHardMaxC` (écart plus grand sous `hardMaxAirC`).
-- **“Cycles compresseur trop courts”**: vérifier `lockoutS`, puis `plateTargetHysteresisC`, puis `adaptiveCoolMaxMinS`.
-- **“Cycles compresseur trop longs”**: vérifier `adaptiveCoolMaxMaxS`, puis `adaptiveCoolOvershootStepDownS`, puis `dewTargetMarginC`.
-
----
-
-## Télémétrie à surveiller en priorité au démarrage
-
-Top 6 startup : `machine_state`, `cool_reason`, `heat_reason`, `plate_too_cold_latch`, `post_cool_active`, `fault`.
-
-| Champ | Lecture opérationnelle | Normal attendu | Alerte terrain |
-|---|---|---|---|
-| `machine_state` | état machine courant | alternance `IDLE/COOLING`, `DRYING_ACTIVE` seulement RH haute | bloqué en `FAULT` ou `POST_COOL_INERTIA` trop long |
-| `cool_reason` | raison froid | `thermal_demand`, `drying_plate_target` | `plate_safety_block` récurrent |
-| `heat_reason` | raison chauffage | `low_temp_protection` ou `drying_air_setpoint` | chauffage actif alors air déjà haut |
-| `simultaneous_mode_active` | autorisation simultané heat+cool | `true` seulement en `DRYING_ACTIVE` | `true` hors DRYING = anomalie logique |
-| `plate_too_cold_latch` | latch anti-gel plaque | `false` la plupart du temps | `true` fréquent = plaque trop froide / marge trop agressive |
-| `drying_overtemp_suspend` | DRYING suspendu par surchauffe air | `false` en régime stable | `true` fréquent = air trop haut, ajuster `hardMaxAirC`/reprise |
-| `cycle_stop_reason` | cause arrêt compresseur cycle en cours | cohérente avec mode (`drying_plate_hysteresis`, `thermal_demand`, etc.) | `learned_runtime_limit` systématique = runtime trop bas |
-| `last_plate_event` | événement plaque récent | `plate_target_reached` parfois en DRYING | jamais atteint en DRYING = condensation faible |
-| `last_post_cool_finalize_reason` | fin de suivi inertie | `plate_rising` ou `plate_stable` | toujours `timeout` = réglages inertie à revoir |
-| `last_min_plate_after_stop_c` | minimum plaque post-stop | cohérent > gel | dérive sous 0°C = risque gel |
-| `overshoot_c` | overshoot post-cool | modéré | >2°C fréquent = agressivité froide trop forte |
-| `learned_max_runtime_s` | limite runtime apprise | se stabilise après quelques cycles | descend constamment au minimum |
-| `post_cool_active` | suivi inertie actif | `true` juste après arrêt compresseur | reste `true` anormalement longtemps |
-| `fault` | dernier défaut | `none` la majorité du temps | défauts répétés capteurs/MQTT |
+- consignes et hystérésis température (`coolOnC`, `coolOffC`, `heatOnC`, `heatOffC`)
+- sécurité plaque (`plateMinOffC`, `plateMinResumeC`)
+- fraîcheur MQTT (`tempStaleS`, `humidityStaleS`)
+- verrou anti-cycles compresseur (`lockoutS`)
+- adaptation durée max de cycle froid (`adaptiveCoolMax*`)
 
 ## Sécurité
 
@@ -152,4 +107,10 @@ Top 6 startup : `machine_state`, `cool_reason`, `heat_reason`, `plate_too_cold_l
 
 - L'humidité est pilotée via une sonde externe MQTT uniquement.
 - Pas de régulation PID : logique volontairement simple (hystérésis + garde-fous).
-- Qualité de régulation dépend fortement du placement/calibrage des sondes.
+- Qualité de régulation dépend de la qualité de placement/calibration des sondes.
+
+## Roadmap minimale
+
+- Ajouter un guide de calibration avancée par saison.
+- Ajouter un profil de paramètres « hiver/été » documenté.
+- Ajouter un export d'événements simplifié pour audit de cycles.
