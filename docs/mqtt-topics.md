@@ -22,12 +22,13 @@ Objet HA (identifiant logique) : `cave_saucisson`
 - Fraîcheur max : `humidityStaleS` (10800 s par défaut)
 - Si invalide/périmé : mode température seule (pas de pilotage point de rosée)
 
-### 3) Commandes Home Assistant humidifier
+### 3) Commandes Home Assistant humidifier/dehumidifier
 
 - Topic mode : `fdp_communs_cave_saucissons/cave_saucisson/set/mode`
   - Payloads valides : `off`, `auto`
   - `off` => désactive le contrôleur (`enabled=false`)
   - `auto` => active le contrôleur (`enabled=true`)
+  - Ce topic est utilisé à la fois comme `command_topic` (ON/OFF via mapping HA) et `mode_command_topic`.
 - Topic cible humidité : `fdp_communs_cave_saucissons/cave_saucisson/set/target_humidity`
   - Payload valide : nombre entre `0` et `100`
   - Payload invalide : ignoré
@@ -116,6 +117,7 @@ Sémantique humidité explicite :
 
 - Préfixe discovery : `homeassistant`
 - Publication retained au boot.
+- Entité principale publiée via composant MQTT `humidifier` avec `device_class=dehumidifier`.
 - Topic de vérité unique pour les entités : `fdp_communs_cave_saucissons/cave_saucisson/state`
 - Les entités extraient leurs champs via `value_template`/`*_template`.
 

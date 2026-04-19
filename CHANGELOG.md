@@ -4,6 +4,12 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.2] - 2026-04-19
+
+### Fixed
+- Conformité MQTT Discovery de l'entité principale Home Assistant: ajout de `command_topic` (requis), `payload_on/off` et `state_value_template` (`ON`/`OFF`) pour l'entité `humidifier`.
+- Clarification sémantique Home Assistant: l'entité conserve le composant MQTT `humidifier` mais publie désormais `device_class=dehumidifier` et le nom "Cave Dehumidifier".
+
 ## [0.2.1] - 2026-04-18
 
 ### Added
