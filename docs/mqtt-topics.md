@@ -121,6 +121,28 @@ Sémantique humidité explicite :
 - Topic de vérité unique pour les entités : `fdp_communs_cave_saucissons/cave_saucisson/state`
 - Les entités extraient leurs champs via `value_template`/`*_template`.
 
+### Profils discovery
+
+#### 1) Mode minimal (recommandé Shelly, défaut)
+
+`CONFIG.discoveryExtendedEnabled = false`
+
+Entités publiées :
+- `homeassistant/humidifier/cave_saucisson_humidifier/config`
+- `homeassistant/sensor/cave_saucisson_air_temperature/config`
+- `homeassistant/sensor/cave_saucisson_plate_temperature/config`
+- `homeassistant/sensor/cave_saucisson_humidity/config`
+- `homeassistant/sensor/cave_saucisson_machine_state/config`
+- `homeassistant/sensor/cave_saucisson_fault/config`
+
+Ce profil limite le pic mémoire au boot (moins de payloads JSON retained et zéro `binary_sensor`).
+
+#### 2) Mode étendu (optionnel)
+
+`CONFIG.discoveryExtendedEnabled = true`
+
+Publie les entités diagnostics supplémentaires (température de contrôle, point de rosée, cible plaque, raisons d'état, runtime appris, overshoot, `binary_sensor` de statut, etc.). À activer seulement si la mémoire disponible le permet.
+
 Compatibilité robuste appliquée:
 - payloads discovery nettoyés des champs `null`/`undefined`
 - binary_sensor avec `payload_on="true"` et `payload_off="false"` (pas de booléens JSON bruts)
@@ -133,9 +155,9 @@ Quand HA a déjà appris des payloads discovery invalides, il faut supprimer les
 > Important : `mosquitto_pub` **n'accepte pas les wildcards en publication**.  
 > La commande `mosquitto_pub -t "homeassistant/+/cave_saucisson_+/config" -n -r` est donc incorrecte.
 
-Le script applique désormais une migration robuste au boot :
-- purge explicite retained des topics discovery `cave_saucisson` connus (actifs + obsolètes),
-- puis republication propre des payloads JSON valides.
+Le script applique désormais une migration robuste et frugale au boot :
+- purge explicite retained des topics discovery `cave_saucisson` connus (minimal + étendu + obsolètes),
+- puis republication du profil actif (minimal par défaut) avec payloads JSON valides.
 
 Procédure opérable en conditions réelles (broker déjà pollué) :
 
@@ -146,14 +168,12 @@ Procédure opérable en conditions réelles (broker déjà pollué) :
 mosquitto_sub -h <BROKER_HOST> -t 'homeassistant/#' -F '%t' -C 500 | grep 'cave_saucisson_'
 ```
 
-3. Supprimer les retained par topics exacts (exemples minimaux) :
+3. Supprimer les retained par topics exacts (exemples) :
 
 ```bash
-mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_post_cool_active/config' -n -r
-mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_plate_too_cold_latch/config' -n -r
-mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_drying_overtemp_suspend/config' -n -r
-mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_humidity_control_available/config' -n -r
-mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/binary_sensor/cave_saucisson_drying_mode_requested/config' -n -r
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/humidifier/cave_saucisson_humidifier/config' -n -r
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/sensor/cave_saucisson_air_temperature/config' -n -r
+mosquitto_pub -h <BROKER_HOST> -t 'homeassistant/sensor/cave_saucisson_fault/config' -n -r
 ```
 
 4. (Optionnel) Supprimer aussi d'éventuels topics historiques :
@@ -171,6 +191,8 @@ Pour diagnostiquer un broker/retained récalcitrant sans toucher à la régulati
 
 - activer `CONFIG.discoveryDebugEnabled = true`,
 - observer le topic `fdp_communs_cave_saucissons/cave_saucisson/debug/discovery_payload`.
+
+> Recommandation stabilité : laisser `CONFIG.discoveryDebugEnabled = false` sur Shelly en production.
 
 Chaque message contient :
 - `action`: `purge` ou `publish`
