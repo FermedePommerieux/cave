@@ -94,4 +94,3 @@ Ordre de priorité :
 - Zéro dépendance runtime externe.
 - Décisions critiques tracées (`state` + `fault`) pour exploitation terrain.
 - Télémétrie d'arrêt séparée: `cycle_stop_reason` (cause arrêt compresseur), `last_plate_event` (événement plaque), `last_post_cool_finalize_reason` (fin d'inertie).
-- Statut humidité explicite dans `state`: disponibilité (`humidity_control_available`), demande (`humidity_demand_active`), requête DRYING (`drying_mode_requested`), blocage (`drying_block_reason`), mode source (`humidity_mode`).

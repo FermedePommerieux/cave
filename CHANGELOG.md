@@ -4,11 +4,6 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
-## [0.2.1] - 2026-04-18
-
-### Added
-- Télémétrie MQTT humidité explicite dans `state`: `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`.
-
 ## [0.2.0] - 2026-04-18
 
 ### Changed
