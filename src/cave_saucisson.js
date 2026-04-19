@@ -205,8 +205,13 @@ function publishAllDiscoveryConfigs() {
   ];
 
   publishDiscoveryConfig("humidifier", "humidifier", {
-    name: "Cave Humidifier",
+    name: "Cave Dehumidifier",
+    device_class: "dehumidifier",
     state_topic: stateTopic,
+    state_value_template: "{% if value_json.enabled %}ON{% else %}OFF{% endif %}",
+    command_topic: baseTopic + "/set/mode",
+    payload_on: "auto",
+    payload_off: "off",
     mode_state_topic: stateTopic,
     mode_state_template: "{% if value_json.enabled %}auto{% else %}off{% endif %}",
     mode_command_topic: baseTopic + "/set/mode",
