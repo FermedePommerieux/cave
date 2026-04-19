@@ -22,16 +22,6 @@ Objet HA (identifiant logique) : `cave_saucisson`
 - Fraîcheur max : `humidityStaleS` (10800 s par défaut)
 - Si invalide/périmé : mode température seule (pas de pilotage point de rosée)
 
-### 3) Commandes Home Assistant humidifier
-
-- Topic mode : `fdp_communs_cave_saucissons/cave_saucisson/set/mode`
-  - Payloads valides : `off`, `auto`
-  - `off` => désactive le contrôleur (`enabled=false`)
-  - `auto` => active le contrôleur (`enabled=true`)
-- Topic cible humidité : `fdp_communs_cave_saucissons/cave_saucisson/set/target_humidity`
-  - Payload valide : nombre entre `0` et `100`
-  - Payload invalide : ignoré
-
 ## Topics publiés
 
 ### 1) État global
@@ -39,7 +29,6 @@ Objet HA (identifiant logique) : `cave_saucisson`
 - Topic : `fdp_communs_cave_saucissons/cave_saucisson/state`
 - Fréquence : toutes les `mqttPublishMs` (5000 ms par défaut) + événements importants
 - Champs clés publiés :
-  - `enabled`, `target_humidity_rh`
   - `machine_state` : `IDLE|COOLING|POST_COOL_INERTIA|HEATING|DRYING_ACTIVE|FAULT`
   - `cool_reason`, `heat_reason`
   - `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`
@@ -54,7 +43,6 @@ Payload JSON (exemple) :
 ```json
 {
   "enabled": true,
-  "target_humidity_rh": 78.0,
   "mode": "temp+humidity",
   "machine_state": "DRYING_ACTIVE",
   "cool_reason": "drying_plate_target",
@@ -111,13 +99,6 @@ Sémantique humidité explicite :
 - Une mesure MQTT est exploitable seulement si :
   - payload numérique valide
   - timestamp de réception < fenêtre de péremption configurée
-
-## Home Assistant MQTT Discovery
-
-- Préfixe discovery : `homeassistant`
-- Publication retained au boot.
-- Topic de vérité unique pour les entités : `fdp_communs_cave_saucissons/cave_saucisson/state`
-- Les entités extraient leurs champs via `value_template`/`*_template`.
 
 ## États et défauts principaux
 

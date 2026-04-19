@@ -8,9 +8,6 @@ Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
 ### Added
 - Télémétrie MQTT humidité explicite dans `state`: `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`.
-- Home Assistant MQTT Discovery (retained, préfixe `homeassistant`) pour 1 humidifier + capteurs/binary sensors depuis le topic JSON `state`.
-- Commandes MQTT minimales pour l'entité humidifier: `set/mode` (`off|auto`) et `set/target_humidity` (`0..100`).
-- Champ `target_humidity_rh` publié dans `state`.
 
 ## [0.2.0] - 2026-04-18
 
