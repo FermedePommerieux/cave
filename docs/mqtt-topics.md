@@ -35,13 +35,6 @@ Objet HA (identifiant logique) : `cave_saucisson`
 - Topic cible humidité : `fdp_communs_cave_saucissons/cave_saucisson/set/target_humidity`
   - Payload valide : nombre entre `0` et `100`
   - Payload invalide : ignoré
-- Topic mode (HA humidifier dédié) : `fdp_communs_cave_saucissons/cave_saucisson/mode/set`
-  - Payloads valides : `1`, `0`
-  - `1` => active le contrôleur (`enabled=true`)
-  - `0` => désactive le contrôleur (`enabled=false`)
-- Topic cible humidité (HA humidifier dédié) : `fdp_communs_cave_saucissons/cave_saucisson/target/set`
-  - Payload valide : nombre entre `0` et `100`
-  - Payload invalide : ignoré
 
 ## Topics publiés
 
@@ -117,17 +110,6 @@ Sémantique humidité explicite :
 }
 ```
 
-### 3) Topics dédiés humidifier (simples, retained)
-
-- Base topic : `fdp_communs_cave_saucissons/cave_saucisson`
-- `.../mode/state` :
-  - `1` si `enabled=true`
-  - `0` si `enabled=false`
-- `.../target/state` : valeur numérique de `target_humidity_rh`
-- `.../current` : humidité courante si disponible
-  - si indisponible : payload retained `None` (reset explicite côté Home Assistant)
-- `.../action` : `drying|idle|off` selon l'état machine courant
-
 ## Règles de fraîcheur
 
 - Une mesure MQTT est exploitable seulement si :
@@ -137,10 +119,9 @@ Sémantique humidité explicite :
 ## Home Assistant MQTT Discovery
 
 - Préfixe discovery : `homeassistant`
-- Publication retained déclenchée depuis la boucle de contrôle uniquement quand MQTT est connecté.
-- Retry automatique à chaque boucle tant que la discovery n'a pas encore été publiée avec succès.
-- L'entité humidifier utilise des topics dédiés simples (sans templates JSON).
-- Les entités `sensor`/`binary_sensor` restent basées sur `fdp_communs_cave_saucissons/cave_saucisson/state` avec templates.
+- Publication retained au boot.
+- Topic de vérité unique pour les entités : `fdp_communs_cave_saucissons/cave_saucisson/state`
+- Les entités extraient leurs champs via `value_template`/`*_template`.
 
 ## États et défauts principaux
 
@@ -155,8 +136,8 @@ Sémantique humidité explicite :
 Les configs Discovery retained sont publiées sous:
 `homeassistant/<component>/cave_saucisson_<entity_key>/config`
 
-- `humidifier` (format dédié)
-  - `homeassistant/humidifier/fdp_communs_cave_saucissons/cave_saucisson/config`
+- `humidifier`
+  - `cave_saucisson_humidifier`
 
 - `sensor`
   - `air_temperature`, `plate_temperature`, `control_temperature`
@@ -169,5 +150,3 @@ Les configs Discovery retained sont publiées sous:
 
 Nettoyage de compatibilité: publication retained vide sur
 `homeassistant/climate/cave_saucisson_climate/config` pour supprimer une ancienne entité climate si elle existe.
-Nettoyage de compatibilité humidifier historique: publication retained vide sur
-`homeassistant/humidifier/cave_saucisson_humidifier/config`.

@@ -4,20 +4,6 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
-## [0.2.4] - 2026-04-18
-
-### Changed
-- Fiabilisation du cycle Discovery Home Assistant: tentative uniquement si MQTT est connecté, retry depuis la boucle de contrôle jusqu'au premier succès, puis verrouillage via `STATE.discoveryDone`.
-- Topic dédié `.../current` de l'entité humidifier: publication retained de la valeur RH si disponible, sinon publication retained de `None` pour réinitialiser la valeur côté Home Assistant.
-- Bootstrap simplifié: suppression de la publication discovery au démarrage, désormais gérée par la boucle avec garde de connexion MQTT.
-
-## [0.2.3] - 2026-04-18
-
-### Changed
-- Discovery MQTT Home Assistant `humidifier` migré vers un pattern robuste à topics dédiés (`mode/state`, `target/state`, `current`, `action`) sans templates JSON.
-- Ajout des commandes MQTT dédiées `mode/set` (`1|0`) et `target/set` (`0..100`) pour l'entité humidifier, en conservant les topics historiques `set/mode` et `set/target_humidity`.
-- Nettoyage retained ajouté pour supprimer l'ancienne discovery humidifier (`homeassistant/humidifier/cave_saucisson_humidifier/config`) avant publication de la nouvelle discovery.
-
 ## [0.2.2] - 2026-04-18
 
 ### Changed

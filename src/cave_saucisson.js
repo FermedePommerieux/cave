@@ -108,7 +108,6 @@ var STATE = {
   postCoolLastC: null,
   lastPostCoolMinC: null,
   lastOvershootC: null,
-  discoveryDone: false,
 
   lastFaultCode: "none",
   lastPublishedAt: 0,
@@ -157,37 +156,6 @@ function mqttPublishRetained(topic, obj) {
 function mqttPublishRetainedRaw(topic, payload) {
   if (typeof MQTT === "undefined") return;
   MQTT.publish(topic, payload, 0, true);
-}
-
-function publishHumidifierEntityTopics(currentHumidityRh) {
-  if (typeof MQTT === "undefined") return;
-  var baseTopic = CONFIG.mqttPrefix + "/" + CONFIG.haObjectId;
-  var action = "off";
-
-  if (STATE.enabled) {
-    if (STATE.machineState === MACHINE.DRYING_ACTIVE && STATE.coolOn) {
-      action = "drying";
-    } else {
-      action = "idle";
-    }
-  }
-
-  MQTT.publish(baseTopic + "/mode/state", STATE.enabled ? "1" : "0", 0, true);
-  MQTT.publish(baseTopic + "/target/state", String(STATE.humiditySetpointRh), 0, true);
-  if (isFiniteNumber(currentHumidityRh)) {
-    MQTT.publish(baseTopic + "/current", String(currentHumidityRh), 0, true);
-  } else {
-    MQTT.publish(baseTopic + "/current", "None", 0, true);
-  }
-  MQTT.publish(baseTopic + "/action", action, 0, true);
-}
-
-function ensureDiscoveryPublished() {
-  if (STATE.discoveryDone) return;
-  if (typeof MQTT === "undefined") return;
-  if (typeof MQTT.isConnected === "function" && !MQTT.isConnected()) return;
-  publishAllDiscoveryConfigs();
-  STATE.discoveryDone = true;
 }
 
 function haDeviceInfo() {
@@ -255,28 +223,24 @@ function publishAllDiscoveryConfigs() {
 
   // Nettoyage topic discovery historique (ancienne entité climate).
   clearDiscoveryConfig("climate", "climate");
-  // Nettoyage topic discovery humidifier historique (JSON templates).
-  clearDiscoveryConfig("humidifier", "humidifier");
 
-  mqttPublishRetained(
-    "homeassistant/humidifier/" + CONFIG.mqttPrefix + "/" + CONFIG.haObjectId + "/config",
-    {
+  publishDiscoveryConfig("humidifier", "humidifier", {
     name: "Cave Humidifier",
-      unique_id: CONFIG.haObjectId + "_humidifier",
-      device: haDeviceInfo(),
-      device_class: "dehumidifier",
-      command_topic: baseTopic + "/mode/set",
-      state_topic: baseTopic + "/mode/state",
-      payload_on: "1",
-      payload_off: "0",
-      action_topic: baseTopic + "/action",
-      target_humidity_command_topic: baseTopic + "/target/set",
-      target_humidity_state_topic: baseTopic + "/target/state",
-      current_humidity_topic: baseTopic + "/current",
-      min_humidity: 0,
-      max_humidity: 100
-    }
-  );
+    state_topic: stateTopic,
+    state_value_template: "{% if value_json.enabled %}ON{% else %}OFF{% endif %}",
+    command_topic: baseTopic + "/set/power",
+    payload_on: "ON",
+    payload_off: "OFF",
+    mode_state_topic: stateTopic,
+    mode_state_template: "{% if value_json.enabled %}auto{% else %}off{% endif %}",
+    mode_command_topic: baseTopic + "/set/mode",
+    modes: ["off", "auto"],
+    current_humidity_topic: stateTopic,
+    current_humidity_template: "{{ value_json.humidity_rh }}",
+    target_humidity_state_topic: stateTopic,
+    target_humidity_state_template: "{{ value_json.target_humidity_rh }}",
+    target_humidity_command_topic: baseTopic + "/set/target_humidity"
+  });
 
   for (i = 0; i < sensors.length; i++) {
     var s = {
@@ -461,7 +425,6 @@ function controlLoop() {
   var airC = readTempC(CONFIG.localAirTempSensorId);
   var plateC = readTempC(CONFIG.localPlateTempSensorId);
 
-  ensureDiscoveryPublished();
   updatePostCoolInertia(ts, plateC);
 
   if (!isFiniteNumber(airC)) {
@@ -727,8 +690,6 @@ function publishState(
   if ((ts - STATE.lastPublishedAt) * 1000 < CONFIG.mqttPublishMs) return;
   STATE.lastPublishedAt = ts;
 
-  publishHumidifierEntityTopics(humidityRh);
-
   mqttPublish("state", {
     enabled: STATE.enabled,
     target_humidity_rh: STATE.humiditySetpointRh,
@@ -807,25 +768,12 @@ function mqttInit() {
     if (!isFiniteNumber(n) || n < 0 || n > 100) return;
     STATE.humiditySetpointRh = n;
   });
-
-  MQTT.subscribe(baseTopic + "/mode/set", function (topic, payload) {
-    if (payload === "1") {
-      STATE.enabled = true;
-    } else if (payload === "0") {
-      STATE.enabled = false;
-    }
-  });
-
-  MQTT.subscribe(baseTopic + "/target/set", function (topic, payload) {
-    var n = parseNumericPayload(payload);
-    if (!isFiniteNumber(n) || n < 0 || n > 100) return;
-    STATE.humiditySetpointRh = n;
-  });
 }
 
 function bootstrap() {
   applyOutputs(false, false, false, "boot_safe", null, null, nowS(), false);
   mqttInit();
+  publishAllDiscoveryConfigs();
   Timer.set(CONFIG.loopMs, true, controlLoop);
   publishFault("BOOT", "info", "Controller started");
 }
