@@ -153,11 +153,6 @@ function mqttPublishRetained(topic, obj) {
   MQTT.publish(topic, JSON.stringify(obj), 0, true);
 }
 
-function mqttPublishRetainedRaw(topic, payload) {
-  if (typeof MQTT === "undefined") return;
-  MQTT.publish(topic, payload, 0, true);
-}
-
 function haDeviceInfo() {
   return {
     identifiers: [CONFIG.haObjectId],
@@ -176,11 +171,6 @@ function publishDiscoveryConfig(component, entityKey, payload) {
   var k;
   for (k in payload) merged[k] = payload[k];
   mqttPublishRetained(discoveryTopic, merged);
-}
-
-function clearDiscoveryConfig(component, entityKey) {
-  var discoveryTopic = "homeassistant/" + component + "/" + CONFIG.haObjectId + "_" + entityKey + "/config";
-  mqttPublishRetainedRaw(discoveryTopic, "");
 }
 
 function publishAllDiscoveryConfigs() {
@@ -204,9 +194,6 @@ function publishAllDiscoveryConfigs() {
     { key: "heat_reason", name: "Cave Heat Reason", field: "heat_reason" },
     { key: "drying_block_reason", name: "Cave Drying Block Reason", field: "drying_block_reason" },
     { key: "humidity_mode", name: "Cave Humidity Mode", field: "humidity_mode" },
-    { key: "cycle_stop_reason", name: "Cave Cycle Stop Reason", field: "cycle_stop_reason" },
-    { key: "last_plate_event", name: "Cave Last Plate Event", field: "last_plate_event" },
-    { key: "last_post_cool_finalize_reason", name: "Cave Last Post Cool Finalize Reason", field: "last_post_cool_finalize_reason" },
     { key: "fault", name: "Cave Fault", field: "fault" }
   ];
   var binarySensors = [
@@ -214,23 +201,12 @@ function publishAllDiscoveryConfigs() {
     { key: "plate_too_cold_latch", name: "Cave Plate Too Cold Latch", field: "plate_too_cold_latch" },
     { key: "drying_overtemp_suspend", name: "Cave Drying Overtemp Suspend", field: "drying_overtemp_suspend" },
     { key: "humidity_control_available", name: "Cave Humidity Control Available", field: "humidity_control_available" },
-    { key: "humidity_demand_active", name: "Cave Humidity Demand Active", field: "humidity_demand_active" },
-    { key: "drying_mode_requested", name: "Cave Drying Mode Requested", field: "drying_mode_requested" },
-    { key: "cool_on", name: "Cave Cool On", field: "cool_on" },
-    { key: "heat_on", name: "Cave Heat On", field: "heat_on" },
-    { key: "enabled", name: "Cave Enabled", field: "enabled" }
+    { key: "drying_mode_requested", name: "Cave Drying Mode Requested", field: "drying_mode_requested" }
   ];
-
-  // Nettoyage topic discovery historique (ancienne entité climate).
-  clearDiscoveryConfig("climate", "climate");
 
   publishDiscoveryConfig("humidifier", "humidifier", {
     name: "Cave Humidifier",
     state_topic: stateTopic,
-    state_value_template: "{% if value_json.enabled %}ON{% else %}OFF{% endif %}",
-    command_topic: baseTopic + "/set/power",
-    payload_on: "ON",
-    payload_off: "OFF",
     mode_state_topic: stateTopic,
     mode_state_template: "{% if value_json.enabled %}auto{% else %}off{% endif %}",
     mode_command_topic: baseTopic + "/set/mode",
@@ -257,9 +233,9 @@ function publishAllDiscoveryConfigs() {
     publishDiscoveryConfig("binary_sensor", binarySensors[i].key, {
       name: binarySensors[i].name,
       state_topic: stateTopic,
-      value_template: "{{ 'true' if value_json." + binarySensors[i].field + " else 'false' }}",
-      payload_on: "true",
-      payload_off: "false"
+      value_template: "{{ value_json." + binarySensors[i].field + " }}",
+      payload_on: true,
+      payload_off: false
     });
   }
 }
@@ -745,14 +721,6 @@ function mqttInit() {
     if (!isFiniteNumber(n) || n < 0 || n > 100) return;
     STATE.externalHumidityRh = n;
     STATE.externalHumidityTs = nowS();
-  });
-
-  MQTT.subscribe(baseTopic + "/set/power", function (topic, payload) {
-    if (payload === "ON") {
-      STATE.enabled = true;
-    } else if (payload === "OFF") {
-      STATE.enabled = false;
-    }
   });
 
   MQTT.subscribe(baseTopic + "/set/mode", function (topic, payload) {
