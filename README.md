@@ -34,15 +34,12 @@ Voir `docs/mqtt-topics.md` pour le détail complet.
 - Publiés :
   - `fdp_communs_cave_saucissons/cave_saucisson/state`
   - `fdp_communs_cave_saucissons/cave_saucisson/fault`
-- `homeassistant/.../config` (MQTT Discovery retained pour humidifier + capteurs)
-- Discovery publié depuis la boucle de contrôle dès que MQTT est connecté (retry jusqu'au premier succès)
+  - `homeassistant/.../config` (MQTT Discovery retained pour humidifier + capteurs)
 
 - Commandes consommées (HA humidifier) :
   - `fdp_communs_cave_saucissons/cave_saucisson/set/power` (`ON|OFF`)
   - `fdp_communs_cave_saucissons/cave_saucisson/set/mode` (`off|auto`)
   - `fdp_communs_cave_saucissons/cave_saucisson/set/target_humidity` (`0..100`)
-  - `fdp_communs_cave_saucissons/cave_saucisson/mode/set` (`1|0`)
-  - `fdp_communs_cave_saucissons/cave_saucisson/target/set` (`0..100`)
 
 ## Déploiement rapide
 
