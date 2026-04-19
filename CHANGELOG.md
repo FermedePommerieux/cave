@@ -4,6 +4,16 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.3] - 2026-04-19
+
+### Fixed
+- Robustesse MQTT Discovery Home Assistant: suppression des champs `null`/`undefined` dans les payloads `homeassistant/.../config`.
+- Compatibilité `binary_sensor` renforcée: templates booléens normalisés et `payload_on="true"` / `payload_off="false"` explicites.
+- Capteurs discovery plus tolérants aux champs absents (`default(none)`), notamment pour `learned_max_runtime`, `overshoot`, `lockout_remaining`, `last_min_plate_after_stop` et `drying_mode_requested`.
+
+### Documentation
+- Ajout d'une procédure opérationnelle de purge des retained discovery avant redéploiement.
+
 ## [0.2.2] - 2026-04-19
 
 ### Fixed

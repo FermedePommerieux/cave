@@ -40,6 +40,17 @@ Voir `docs/mqtt-topics.md` pour le détail complet.
   - `fdp_communs_cave_saucissons/cave_saucisson/set/mode` (`off|auto`)
   - `fdp_communs_cave_saucissons/cave_saucisson/set/target_humidity` (`0..100`)
 
+### Home Assistant MQTT Discovery (fiabilité)
+
+Le script publie les topics discovery `homeassistant/.../config` en retained au boot.
+
+Pour maximiser la compatibilité HA:
+- payload discovery généré uniquement en JSON strict (`JSON.stringify`)
+- binary sensors en `payload_on="true"` / `payload_off="false"` (chaînes explicites)
+- templates défensifs avec `default(none)` sur capteurs numériques
+
+Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il faut **purger les retained** puis redémarrer le script (procédure détaillée dans `docs/mqtt-topics.md`).
+
 ## Déploiement rapide
 
 1. Copier `src/cave_saucisson.js` dans l'éditeur de script Shelly.
