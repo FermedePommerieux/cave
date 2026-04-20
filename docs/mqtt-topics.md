@@ -44,9 +44,8 @@ Objet HA (identifiant logique) : `cave_saucisson`
   - `machine_state` : `IDLE|COOLING|POST_COOL_INERTIA|HEATING|DRYING_ACTIVE|FAULT`
   - `cool_reason`, `heat_reason`
   - `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`
-  - `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`, `condensing_margin_c`
-  - `condensing_total_s`, `drying_active_total_s`, `condensing_recent_percent`, `compressor_starts`
-  - `drying_ineffective`, `drying_ineffective_reason`, `drying_condensing_percent`, `drying_recent_compressor_s`
+  - `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`
+  - `drying_ineffective`
   - `cycle_stop_reason`, `last_plate_event`, `last_post_cool_finalize_reason`, `last_min_plate_after_stop_c`, `overshoot_c`
   - `learned_max_runtime_s`
   - `drying_overtemp_suspend` (suspension temporaire du séchage actif sur surchauffe ambiance)
@@ -78,13 +77,7 @@ Payload JSON (exemple) :
   "plate_target_c": 7.9,
   "plate_minus_dew_c": -1.2,
   "condensing_now": true,
-  "condensing_margin_c": 1.2,
-  "condensing_total_s": 5400,
-  "drying_active_total_s": 9200,
-  "condensing_recent_percent": 41.8,
-  "compressor_starts": 33,
   "drying_ineffective": false,
-  "drying_ineffective_reason": "none",
   "cool_on": true,
   "heat_on": true,
   "cycle_stop_reason": "drying_plate_hysteresis",
@@ -150,13 +143,19 @@ Entités publiées :
 - `homeassistant/sensor/cave_saucisson_machine_state/config`
 - `homeassistant/sensor/cave_saucisson_fault/config`
 
-Ce profil limite le pic mémoire au boot (moins de payloads JSON retained) tout en conservant un mini diagnostic condensation optionnel (`CONFIG.discoveryCondensationDiagnosticsEnabled=true`).
+Ce profil limite le pic mémoire au boot (moins de payloads JSON retained), n'ajoute aucune entité condensation et garde `CONFIG.discoveryCondensationDiagnosticsEnabled=false` par défaut.
 
 #### 2) Mode étendu (optionnel)
 
 `CONFIG.discoveryExtendedEnabled = true`
 
-Publie les entités diagnostics supplémentaires (température de contrôle, point de rosée, cible plaque, raisons d'état, runtime appris, overshoot, `binary_sensor` de statut, etc.). À activer seulement si la mémoire disponible le permet.
+Publie uniquement le noyau condensation utile:
+- `homeassistant/sensor/cave_saucisson_dew_point/config`
+- `homeassistant/sensor/cave_saucisson_plate_target/config`
+- `homeassistant/sensor/cave_saucisson_plate_minus_dew/config`
+- `homeassistant/binary_sensor/cave_saucisson_condensing_now/config`
+
+À activer seulement si la mémoire disponible le permet.
 
 Compatibilité robuste appliquée:
 - payloads discovery nettoyés des champs `null`/`undefined`

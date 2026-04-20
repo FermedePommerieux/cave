@@ -4,6 +4,17 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.7] - 2026-04-20
+
+### Fixed
+- Correction ciblée mémoire pour éviter `script ran out of memory` côté Shelly: `discoveryCondensationDiagnosticsEnabled` repassé à `false` par défaut et suppression des publications condensation en profil discovery minimal.
+- Profil discovery étendu drastiquement réduit au noyau condensation indispensable (`dew_point`, `plate_target`, `plate_minus_dew`, `condensing_now`).
+- Payload MQTT `state` allégé: retrait des compteurs/diagnostics secondaires les plus volumineux (`condensing_total_s`, `drying_active_total_s`, `compressor_starts`, `drying_recent_compressor_s`, `drying_condensing_percent`, `drying_ineffective_reason`, `condensing_margin_c`, `condensing_recent_percent`).
+- Micro-optimisation d'allocation dans `publishState`: mutualisation du calcul `plate_minus_dew_c` / `condensing_now` pour éviter les évaluations répétées.
+
+### Documentation
+- README + architecture + topics MQTT alignés sur le nouveau profil mémoire (minimal strict + étendu condensé + champs `state` conservés).
+
 ## [0.2.6] - 2026-04-20
 
 ### Fixed
