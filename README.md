@@ -11,6 +11,7 @@ Maintenir des conditions stables pour l'affinage en donnant la priorité à la s
 - prévention du gel (plaque froide)
 - simultané chauffage + froid interdit sauf en mode séchage actif
 - déshumidification uniquement par condensation sur plaque froide
+- consigne humidité Home Assistant réellement utilisée (hystérésis autour de la consigne utilisateur)
 - mode dégradé automatique si capteurs MQTT externes invalides
 
 ## Matériel visé
@@ -47,7 +48,7 @@ Le script publie les topics discovery `homeassistant/.../config` en retained au 
 Par défaut (`CONFIG.discoveryExtendedEnabled = false`), un **mode minimal** est utilisé pour réduire fortement la mémoire runtime Shelly :
 - `humidifier` principal (`device_class=dehumidifier`)
 - capteurs essentiels : `air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`
-- aucun `binary_sensor` discovery en mode minimal
+- mini diagnostic condensation optionnel (`CONFIG.discoveryCondensationDiagnosticsEnabled=true`) : `dew_point`, `plate_target`, `plate_minus_dew`, `cool_reason`, `drying_block_reason`, `condensing_now`
 
 Un **mode étendu** reste possible (`CONFIG.discoveryExtendedEnabled = true`) si vous avez vraiment besoin de toute l'observabilité Home Assistant (capteurs diagnostics + `binary_sensor`).
 
@@ -80,7 +81,7 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 
 1. **First-start (obligatoire)** : `plateMinOffC`, `plateMinResumeC`, `lockoutS`, `hardMaxAirC`, `dryingResumeBelowHardMaxC`.
 2. **Régulation de base** : `coolOnC`, `coolOffC`, `heatOnC`, `heatOffC`, `heatDisableAboveC`.
-3. **Séchage** : `rhOn`, `rhOff`, `dewTargetMarginC`, `plateTargetHysteresisC`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
+3. **Séchage** : `humiditySetpointHysteresisRh`, `humiditySetpointMinRh`, `humiditySetpointMaxRh`, `dewTargetMarginC`, `plateTargetHysteresisC`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
 4. **Affinage avancé compresseur** : `adaptiveCool*`, `inertia*`, `postCool*`.
 
 > Règle simple: ne modifier qu'un groupe à la fois, puis observer au moins 24h de cycles.
@@ -99,8 +100,9 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 
 | Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
 |---|---:|---|---|---|---|---|---|
-| `rhOn` | 80.0 | Entrée `DRYING_ACTIVE` | séchage démarre trop souvent | RH reste haute trop longtemps | séchage sous-utilisé | séchage trop fréquent | High |
-| `rhOff` | 77.0 | Sortie/maintien `DRYING_ACTIVE` | sortie trop tardive | mode sèche trop longtemps | cycles DRYING longs | pompage entrée/sortie | High |
+| `humiditySetpointHysteresisRh` | 3.0 | Bande autour de `target_humidity_rh` (consigne HA) | transitions DRYING trop sensibles | entrée/sortie DRYING trop tardive | DRYING trop long | pompage DRYING | High |
+| `humiditySetpointMinRh` | 60.0 | Borne basse appliquée à la consigne utilisateur | consigne HA trop basse par erreur | besoin RH plus sèche terrain | blocage séchage trop agressif | séchage insuffisant | Medium |
+| `humiditySetpointMaxRh` | 90.0 | Borne haute appliquée à la consigne utilisateur | besoin de protéger d'une consigne trop humide | besoin RH plus humide terrain | séchage trop tardif | séchage trop fréquent | Medium |
 | `dewTargetMarginC` | 1.0 | Cible plaque sous point de rosée | condensation insuffisante | plaque trop froide/overshoot | risque gel/overshoot | déshumidification faible | High |
 | `plateTargetHysteresisC` | 0.6 | Hystérésis ON/OFF compresseur en DRYING | compresseur commute trop vite | plateau trop large | humidité moins tenue finement | court-cyclage | Medium |
 | `dryingAirSetpointC` | 12.0 | Consigne air du chauffage en DRYING | air trop froid en DRYING | air trop chaud en DRYING | chauffe excessive | séchage inefficace | Medium |
@@ -142,7 +144,7 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 ### Réponses rapides aux problèmes terrain
 
 - **“La plaque overshoot trop”**: vérifier d'abord `dewTargetMarginC`, puis `adaptiveCoolOvershootStepDownS`, puis `inertiaRiseFinishDeltaC` / `postCoolStableWindowS`.
-- **“Séchage trop faible”**: vérifier d'abord validité RH MQTT, puis `rhOn/rhOff`, puis `dewTargetMarginC` (trop faible) et blocage `plate_too_cold_latch`.
+- **“Séchage trop faible”**: vérifier d'abord validité RH MQTT, puis `target_humidity_rh` + `humiditySetpointHysteresisRh`, puis `dewTargetMarginC` (trop faible) et blocage `plate_too_cold_latch`.
 - **“Reprise DRYING trop agressive après surchauffe”**: augmenter `dryingResumeBelowHardMaxC` (écart plus grand sous `hardMaxAirC`).
 - **“Cycles compresseur trop courts”**: vérifier `lockoutS`, puis `plateTargetHysteresisC`, puis `adaptiveCoolMaxMinS`.
 - **“Cycles compresseur trop longs”**: vérifier `adaptiveCoolMaxMaxS`, puis `adaptiveCoolOvershootStepDownS`, puis `dewTargetMarginC`.
@@ -153,7 +155,10 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 
 Top 6 startup : `machine_state`, `cool_reason`, `heat_reason`, `plate_too_cold_latch`, `post_cool_active`, `fault`.
 
+Diagnostic condensation (nouveaux champs): `plate_minus_dew_c`, `condensing_now`, `condensing_margin_c`, `condensing_recent_percent`, `drying_ineffective`, `drying_ineffective_reason`, `compressor_starts`.
+
 Visibilité humidité (diagnostic rapide) : `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`.
+Consigne humidité : `target_humidity_requested_rh` (demande brute) vs `target_humidity_rh` (consigne effective bornée).
 
 | Champ | Lecture opérationnelle | Normal attendu | Alerte terrain |
 |---|---|---|---|

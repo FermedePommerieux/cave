@@ -4,6 +4,21 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.6] - 2026-04-20
+
+### Fixed
+- La demande de séchage utilise désormais réellement `target_humidity_rh` (consigne HA/MQTT) avec hystérésis centrée sur la consigne utilisateur, au lieu des seuils fixes `rhOn/rhOff`.
+- Calcul du point de rosée dissocié de la température de contrôle globale: source configurable via `dewPointTempSource` (`local_air` ou `external_if_fresh`).
+
+### Added
+- Nouvelles métriques MQTT d'efficacité de condensation: `plate_minus_dew_c`, `condensing_now`, `condensing_margin_c`, `condensing_total_s`, `drying_active_total_s`, `condensing_recent_percent`, `compressor_starts`.
+- Diagnostic de séchage inefficace: `drying_ineffective`, `drying_ineffective_reason`, `drying_condensing_percent`, `drying_recent_compressor_s`.
+- Mini mode discovery diagnostic condensation en profil minimal (`discoveryCondensationDiagnosticsEnabled`) avec entités utiles (`dew_point`, `plate_target`, `plate_minus_dew`, `condensing_now`, `cool_reason`, `drying_block_reason`).
+
+### Documentation
+- README, architecture et topics MQTT mis à jour pour la nouvelle logique de consigne humidité et d'observabilité condensation.
+- Clarification MQTT ajoutée sur `target_humidity_requested_rh` (consigne demandée) vs `target_humidity_rh` (consigne effective), avec checklist commissioning pour valider les transitions `drying_ineffective` et contrôler l'empreinte mémoire discovery sur Shelly.
+
 ## [0.2.5] - 2026-04-19
 
 ### Fixed

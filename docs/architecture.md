@@ -69,14 +69,18 @@ Contraintes de robustesse discovery Home Assistant:
 ### 2) Régulation plaque de condensation
 
 - Si humidité MQTT valide, calcul du point de rosée.
+- Source température du point de rosée configurable (`dewPointTempSource`):
+  - `local_air` (défaut)
+  - `external_if_fresh` (température MQTT externe si fraîche, sinon fallback air locale)
 - Cible plaque : `plateTargetC = dewPointC - dewTargetMarginC`.
 - En `DRYING_ACTIVE`, compresseur piloté d'abord par la cible plaque (hystérésis dédiée).
 - Température plaque reste la vérité de sécurité (anti-gel/latch).
 
 ### Mode `DRYING_ACTIVE`
 
-- Entrée : humidité valide au-dessus de `rhOn`.
-- Sortie : humidité redescendue sous `rhOff` ou humidité invalide/périmée.
+- Entrée : humidité valide au-dessus de `target_humidity_rh + (humiditySetpointHysteresisRh / 2)`.
+- Sortie : humidité sous `target_humidity_rh - (humiditySetpointHysteresisRh / 2)` ou humidité invalide/périmée.
+- La consigne utilisateur `target_humidity_rh` est bornée par `humiditySetpointMinRh..humiditySetpointMaxRh`.
 - Chauffage piloté par une consigne d'air dédiée (`dryingAirSetpointC`), jamais directement par l'humidité.
 - Simultané chauffage + compresseur autorisé **uniquement** dans cet état.
 - Si `airC >= hardMaxAirC`, `DRYING_ACTIVE` est suspendu et la priorité passe à `COOLING` (protection ambiance).
@@ -117,3 +121,13 @@ Ordre de priorité :
 - Décisions critiques tracées (`state` + `fault`) pour exploitation terrain.
 - Télémétrie d'arrêt séparée: `cycle_stop_reason` (cause arrêt compresseur), `last_plate_event` (événement plaque), `last_post_cool_finalize_reason` (fin d'inertie).
 - Statut humidité explicite dans `state`: disponibilité (`humidity_control_available`), demande (`humidity_demand_active`), requête DRYING (`drying_mode_requested`), blocage (`drying_block_reason`), mode source (`humidity_mode`).
+
+## Observabilité condensation
+
+Le `state` publie désormais des métriques orientées efficacité réelle de séchage:
+- `plate_minus_dew_c`, `condensing_now`, `condensing_margin_c`
+- `condensing_total_s`, `drying_active_total_s`, `condensing_recent_percent`
+- `compressor_starts`, `drying_condensing_percent`, `drying_recent_compressor_s`
+- diagnostic `drying_ineffective` + `drying_ineffective_reason`
+
+Le diagnostic `drying_ineffective` se déclenche uniquement en `DRYING_ACTIVE` après une durée minimale de compresseur dans la fenêtre récente, si la part du temps réellement sous rosée reste trop faible.
