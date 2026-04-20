@@ -64,8 +64,8 @@ var CONFIG = {
   mqttPublishMs: 5000,
   // Discovery HA allégé par défaut pour limiter RAM/CPU au boot Shelly.
   discoveryExtendedEnabled: false,
-  // Mode léger dédié condensation en discovery minimal.
-  discoveryCondensationDiagnosticsEnabled: true,
+  // Option legacy conservée pour compatibilité config; la publication condensation en minimal est forcée OFF.
+  discoveryCondensationDiagnosticsEnabled: false,
   // Migration discovery HA: debug optionnel des payloads envoyés (coûteux en mémoire).
   discoveryDebugEnabled: false,
   discoveryDebugTopicSuffix: "debug/discovery_payload",
@@ -209,32 +209,10 @@ var DISCOVERY_MINIMAL_ENTITIES = [
 ];
 
 var DISCOVERY_EXTENDED_ONLY_ENTITIES = [
-  { component: "sensor", key: "control_temperature" },
-  { component: "sensor", key: "dew_temp_source" },
   { component: "sensor", key: "dew_point" },
   { component: "sensor", key: "plate_target" },
   { component: "sensor", key: "plate_minus_dew" },
-  { component: "sensor", key: "condensing_margin" },
-  { component: "sensor", key: "condensing_recent_percent" },
-  { component: "sensor", key: "condensing_total" },
-  { component: "sensor", key: "drying_active_total" },
-  { component: "sensor", key: "drying_compressor_starts" },
-  { component: "sensor", key: "target_humidity" },
-  { component: "sensor", key: "learned_max_runtime" },
-  { component: "sensor", key: "overshoot" },
-  { component: "sensor", key: "lockout_remaining" },
-  { component: "sensor", key: "last_min_plate_after_stop" },
-  { component: "sensor", key: "cool_reason" },
-  { component: "sensor", key: "heat_reason" },
-  { component: "sensor", key: "drying_block_reason" },
-  { component: "sensor", key: "humidity_mode" },
-  { component: "binary_sensor", key: "post_cool_active" },
-  { component: "binary_sensor", key: "plate_too_cold_latch" },
-  { component: "binary_sensor", key: "drying_overtemp_suspend" },
-  { component: "binary_sensor", key: "humidity_control_available" },
-  { component: "binary_sensor", key: "drying_mode_requested" },
   { component: "binary_sensor", key: "condensing_now" },
-  { component: "binary_sensor", key: "drying_ineffective" },
   // Ancienne entité historique à purger.
   { component: "climate", key: "climate" }
 ];
@@ -243,8 +221,6 @@ var DISCOVERY_CONDENSATION_DIAG_ENTITIES = [
   { component: "sensor", key: "dew_point" },
   { component: "sensor", key: "plate_target" },
   { component: "sensor", key: "plate_minus_dew" },
-  { component: "sensor", key: "cool_reason" },
-  { component: "sensor", key: "drying_block_reason" },
   { component: "binary_sensor", key: "condensing_now" }
 ];
 
@@ -349,67 +325,9 @@ function publishAllDiscoveryConfigs() {
     value_template: "{{ value_json.fault | default(none) }}"
   });
 
-  if (CONFIG.discoveryCondensationDiagnosticsEnabled) {
-    publishDiscoveryConfig("sensor", "dew_point", {
-      name: "Cave Dew Point",
-      state_topic: stateTopic,
-      value_template: "{{ value_json.dew_point_c | default(none) }}",
-      device_class: "temperature",
-      unit_of_measurement: "°C"
-    });
-
-    publishDiscoveryConfig("sensor", "plate_target", {
-      name: "Cave Plate Target",
-      state_topic: stateTopic,
-      value_template: "{{ value_json.plate_target_c | default(none) }}",
-      device_class: "temperature",
-      unit_of_measurement: "°C"
-    });
-
-    publishDiscoveryConfig("sensor", "plate_minus_dew", {
-      name: "Cave Plate Minus Dew",
-      state_topic: stateTopic,
-      value_template: "{{ value_json.plate_minus_dew_c | default(none) }}",
-      unit_of_measurement: "°C"
-    });
-
-    publishDiscoveryConfig("sensor", "cool_reason", {
-      name: "Cave Cool Reason",
-      state_topic: stateTopic,
-      value_template: "{{ value_json.cool_reason | default(none) }}"
-    });
-
-    publishDiscoveryConfig("sensor", "drying_block_reason", {
-      name: "Cave Drying Block Reason",
-      state_topic: stateTopic,
-      value_template: "{{ value_json.drying_block_reason | default(none) }}"
-    });
-
-    publishDiscoveryConfig("binary_sensor", "condensing_now", {
-      name: "Cave Condensing Now",
-      state_topic: stateTopic,
-      value_template: "{{ value_json.condensing_now | string | lower }}",
-      payload_on: "true",
-      payload_off: "false"
-    });
-  }
-
   if (!CONFIG.discoveryExtendedEnabled) return;
 
-  // Mode étendu optionnel: visibilité diagnostics complète, plus coûteuse en mémoire.
-  publishDiscoveryConfig("sensor", "control_temperature", {
-    name: "Cave Control Temperature",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.control_temp_c | default(none) }}",
-    device_class: "temperature",
-    unit_of_measurement: "°C"
-  });
-
-  publishDiscoveryConfig("sensor", "dew_temp_source", {
-    name: "Cave Dew Temp Source",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.dew_temp_source | default(none) }}"
-  });
+  // Mode étendu optionnel: réduit au noyau condensation utile (mémoire).
 
   publishDiscoveryConfig("sensor", "dew_point", {
     name: "Cave Dew Point",
@@ -434,145 +352,6 @@ function publishAllDiscoveryConfigs() {
     unit_of_measurement: "°C"
   });
 
-  publishDiscoveryConfig("sensor", "condensing_margin", {
-    name: "Cave Condensing Margin",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.condensing_margin_c | default(none) }}",
-    unit_of_measurement: "°C"
-  });
-
-  publishDiscoveryConfig("sensor", "condensing_recent_percent", {
-    name: "Cave Condensing Recent Percent",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.condensing_recent_percent | default(none) }}",
-    unit_of_measurement: "%"
-  });
-
-  publishDiscoveryConfig("sensor", "condensing_total", {
-    name: "Cave Condensing Total",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.condensing_total_s | default(none) }}",
-    device_class: "duration",
-    unit_of_measurement: "s"
-  });
-
-  publishDiscoveryConfig("sensor", "drying_active_total", {
-    name: "Cave Drying Active Total",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.drying_active_total_s | default(none) }}",
-    device_class: "duration",
-    unit_of_measurement: "s"
-  });
-
-  publishDiscoveryConfig("sensor", "drying_compressor_starts", {
-    name: "Cave Compressor Starts",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.compressor_starts | default(none) }}"
-  });
-
-  publishDiscoveryConfig("sensor", "target_humidity", {
-    name: "Cave Target Humidity",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.target_humidity_rh | default(none) }}",
-    device_class: "humidity",
-    unit_of_measurement: "%"
-  });
-
-  publishDiscoveryConfig("sensor", "learned_max_runtime", {
-    name: "Cave Learned Max Runtime",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.learned_max_runtime_s | default(none) }}",
-    device_class: "duration",
-    unit_of_measurement: "s"
-  });
-
-  publishDiscoveryConfig("sensor", "overshoot", {
-    name: "Cave Plate Overshoot",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.overshoot_c | default(none) }}",
-    unit_of_measurement: "°C"
-  });
-
-  publishDiscoveryConfig("sensor", "lockout_remaining", {
-    name: "Cave Lockout Remaining",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.lockout_remaining_s | default(none) }}",
-    device_class: "duration",
-    unit_of_measurement: "s"
-  });
-
-  publishDiscoveryConfig("sensor", "last_min_plate_after_stop", {
-    name: "Cave Last Min Plate After Stop",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.last_min_plate_after_stop_c | default(none) }}",
-    device_class: "temperature",
-    unit_of_measurement: "°C"
-  });
-
-  publishDiscoveryConfig("sensor", "cool_reason", {
-    name: "Cave Cool Reason",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.cool_reason | default(none) }}"
-  });
-
-  publishDiscoveryConfig("sensor", "heat_reason", {
-    name: "Cave Heat Reason",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.heat_reason | default(none) }}"
-  });
-
-  publishDiscoveryConfig("sensor", "drying_block_reason", {
-    name: "Cave Drying Block Reason",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.drying_block_reason | default(none) }}"
-  });
-
-  publishDiscoveryConfig("sensor", "humidity_mode", {
-    name: "Cave Humidity Mode",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.humidity_mode | default(none) }}"
-  });
-
-  publishDiscoveryConfig("binary_sensor", "post_cool_active", {
-    name: "Cave Post Cool Active",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.post_cool_active | string | lower }}",
-    payload_on: "true",
-    payload_off: "false"
-  });
-
-  publishDiscoveryConfig("binary_sensor", "plate_too_cold_latch", {
-    name: "Cave Plate Too Cold Latch",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.plate_too_cold_latch | string | lower }}",
-    payload_on: "true",
-    payload_off: "false"
-  });
-
-  publishDiscoveryConfig("binary_sensor", "drying_overtemp_suspend", {
-    name: "Cave Drying Overtemp Suspend",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.drying_overtemp_suspend | string | lower }}",
-    payload_on: "true",
-    payload_off: "false"
-  });
-
-  publishDiscoveryConfig("binary_sensor", "humidity_control_available", {
-    name: "Cave Humidity Control Available",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.humidity_control_available | string | lower }}",
-    payload_on: "true",
-    payload_off: "false"
-  });
-
-  publishDiscoveryConfig("binary_sensor", "drying_mode_requested", {
-    name: "Cave Drying Mode Requested",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.drying_mode_requested | string | lower }}",
-    payload_on: "true",
-    payload_off: "false"
-  });
-
   publishDiscoveryConfig("binary_sensor", "condensing_now", {
     name: "Cave Condensing Now",
     state_topic: stateTopic,
@@ -581,13 +360,6 @@ function publishAllDiscoveryConfigs() {
     payload_off: "false"
   });
 
-  publishDiscoveryConfig("binary_sensor", "drying_ineffective", {
-    name: "Cave Drying Ineffective",
-    state_topic: stateTopic,
-    value_template: "{{ value_json.drying_ineffective | string | lower }}",
-    payload_on: "true",
-    payload_off: "false"
-  });
 }
 
 function publishFault(code, severity, message) {
@@ -1072,6 +844,9 @@ function publishState(
 ) {
   if ((ts - STATE.lastPublishedAt) * 1000 < CONFIG.mqttPublishMs) return;
   STATE.lastPublishedAt = ts;
+  var hasPlateAndDew = isFiniteNumber(plateC) && isFiniteNumber(dewC);
+  var plateMinusDewC = hasPlateAndDew ? (plateC - dewC) : null;
+  var condensingNow = hasPlateAndDew ? (plateC < dewC) : false;
 
   mqttPublish("state", {
     enabled: STATE.enabled,
@@ -1094,17 +869,9 @@ function publishState(
     dew_temp_source: dewTempSource,
     dew_point_c: dewC,
     plate_target_c: plateTargetC,
-    plate_minus_dew_c: (isFiniteNumber(plateC) && isFiniteNumber(dewC)) ? (plateC - dewC) : null,
-    condensing_now: (isFiniteNumber(plateC) && isFiniteNumber(dewC)) ? (plateC < dewC) : false,
-    condensing_margin_c: (isFiniteNumber(plateC) && isFiniteNumber(dewC) && plateC < dewC) ? (dewC - plateC) : null,
-    condensing_total_s: STATE.condensingTotalS,
-    drying_active_total_s: STATE.dryingActiveTotalS,
-    condensing_recent_percent: STATE.recentWindowTotalS > 0.1 ? (100.0 * STATE.recentWindowCondensingS / STATE.recentWindowTotalS) : null,
-    compressor_starts: STATE.compressorStarts,
+    plate_minus_dew_c: plateMinusDewC,
+    condensing_now: condensingNow,
     drying_ineffective: STATE.dryingIneffective,
-    drying_ineffective_reason: STATE.dryingIneffectiveReason,
-    drying_condensing_percent: STATE.recentDryingCompressorS > 0.1 ? (100.0 * STATE.recentDryingCondensingS / STATE.recentDryingCompressorS) : null,
-    drying_recent_compressor_s: STATE.recentDryingCompressorS,
     external_temp_fresh: externalTempFresh(ts),
     external_humidity_fresh: externalHumidityFresh(ts),
     cool_on: STATE.coolOn,

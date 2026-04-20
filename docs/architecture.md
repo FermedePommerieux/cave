@@ -33,8 +33,10 @@ Contraintes de robustesse discovery Home Assistant:
 - templates discovery défensifs (`default(none)` pour numériques) pour éviter des états `unknown` cassants côté HA
 - mode discovery minimal par défaut (`CONFIG.discoveryExtendedEnabled=false`) pour sobriété mémoire:
   - `humidifier` + capteurs essentiels (`air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`)
-  - aucun `binary_sensor` en mode minimal
-- mode discovery étendu optionnel (`CONFIG.discoveryExtendedEnabled=true`) pour observabilité complète
+  - aucun `binary_sensor` ni capteur condensation additionnel en mode minimal strict
+  - `CONFIG.discoveryCondensationDiagnosticsEnabled=false` par défaut
+- mode discovery étendu optionnel (`CONFIG.discoveryExtendedEnabled=true`) réduit au noyau condensation:
+  - `dew_point`, `plate_target`, `plate_minus_dew`, `condensing_now`
 - migration discovery au boot: purge explicite des retained `cave_saucisson` connus (minimal + étendu/obsolètes), puis republication du profil actif
 - debug discovery optionnel via topic MQTT dédié (`CONFIG.discoveryDebugEnabled=false` par défaut, sans effet sur la régulation)
 
@@ -125,9 +127,8 @@ Ordre de priorité :
 ## Observabilité condensation
 
 Le `state` publie désormais des métriques orientées efficacité réelle de séchage:
-- `plate_minus_dew_c`, `condensing_now`, `condensing_margin_c`
-- `condensing_total_s`, `drying_active_total_s`, `condensing_recent_percent`
-- `compressor_starts`, `drying_condensing_percent`, `drying_recent_compressor_s`
-- diagnostic `drying_ineffective` + `drying_ineffective_reason`
+- `target_humidity_rh`, `target_humidity_requested_rh`
+- `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`
+- `condensing_now`, `drying_ineffective`
 
-Le diagnostic `drying_ineffective` se déclenche uniquement en `DRYING_ACTIVE` après une durée minimale de compresseur dans la fenêtre récente, si la part du temps réellement sous rosée reste trop faible.
+Le diagnostic `drying_ineffective` se déclenche uniquement en `DRYING_ACTIVE` après une durée minimale de compresseur dans la fenêtre récente, si la part du temps réellement sous rosée reste trop faible (les compteurs internes restent utilisés pour la décision même s'ils ne sont plus publiés dans `state`).

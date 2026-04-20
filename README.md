@@ -48,9 +48,11 @@ Le script publie les topics discovery `homeassistant/.../config` en retained au 
 Par défaut (`CONFIG.discoveryExtendedEnabled = false`), un **mode minimal** est utilisé pour réduire fortement la mémoire runtime Shelly :
 - `humidifier` principal (`device_class=dehumidifier`)
 - capteurs essentiels : `air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`
-- mini diagnostic condensation optionnel (`CONFIG.discoveryCondensationDiagnosticsEnabled=true`) : `dew_point`, `plate_target`, `plate_minus_dew`, `cool_reason`, `drying_block_reason`, `condensing_now`
+- aucun capteur/binary sensor condensation supplémentaire en profil minimal strict
+- `CONFIG.discoveryCondensationDiagnosticsEnabled=false` par défaut (garde-fou mémoire)
 
-Un **mode étendu** reste possible (`CONFIG.discoveryExtendedEnabled = true`) si vous avez vraiment besoin de toute l'observabilité Home Assistant (capteurs diagnostics + `binary_sensor`).
+Un **mode étendu** reste possible (`CONFIG.discoveryExtendedEnabled = true`) avec un sous-ensemble condensation compact :
+`dew_point`, `plate_target`, `plate_minus_dew`, `condensing_now`.
 
 Pour maximiser la compatibilité HA :
 - payload discovery généré uniquement en JSON strict (`JSON.stringify`)
@@ -155,7 +157,7 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 
 Top 6 startup : `machine_state`, `cool_reason`, `heat_reason`, `plate_too_cold_latch`, `post_cool_active`, `fault`.
 
-Diagnostic condensation (nouveaux champs): `plate_minus_dew_c`, `condensing_now`, `condensing_margin_c`, `condensing_recent_percent`, `drying_ineffective`, `drying_ineffective_reason`, `compressor_starts`.
+Diagnostic condensation (noyau conservé): `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`, `drying_ineffective`.
 
 Visibilité humidité (diagnostic rapide) : `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`.
 Consigne humidité : `target_humidity_requested_rh` (demande brute) vs `target_humidity_rh` (consigne effective bornée).
