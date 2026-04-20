@@ -23,6 +23,9 @@ var CONFIG = {
   defaultEnabled: true,
   defaultTempSetpointC: 12.0,
   defaultHumiditySetpointRh: 78.0,
+  humiditySetpointHysteresisRh: 3.0,
+  humiditySetpointMinRh: 60.0,
+  humiditySetpointMaxRh: 90.0,
 
   hardMaxAirC: 14.0,
   dryingResumeBelowHardMaxC: 13.5,
@@ -39,14 +42,12 @@ var CONFIG = {
   dryingAirSetpointC: 12.0,
   dryingAirHysteresisC: 0.6,
 
-  rhOn: 80.0,
-  rhOff: 77.0,
-
   plateMinOffC: 0.0,
   plateMinResumeC: 3.0,
 
   dewTargetMarginC: 1.0,
   plateTargetHysteresisC: 0.6,
+  dewPointTempSource: "local_air", // "local_air" | "external_if_fresh"
 
   adaptiveCoolMaxInitialS: 240,
   adaptiveCoolMaxMinS: 120,
@@ -63,9 +64,16 @@ var CONFIG = {
   mqttPublishMs: 5000,
   // Discovery HA allégé par défaut pour limiter RAM/CPU au boot Shelly.
   discoveryExtendedEnabled: false,
+  // Mode léger dédié condensation en discovery minimal.
+  discoveryCondensationDiagnosticsEnabled: true,
   // Migration discovery HA: debug optionnel des payloads envoyés (coûteux en mémoire).
   discoveryDebugEnabled: false,
-  discoveryDebugTopicSuffix: "debug/discovery_payload"
+  discoveryDebugTopicSuffix: "debug/discovery_payload",
+
+  // Fenêtre glissante (approchée) pour diagnostiquer l'efficacité de condensation.
+  condensingRecentWindowS: 1800,
+  dryingIneffectiveMinCompressorS: 600,
+  dryingIneffectiveMinCondensingPct: 25
 };
 
 var MACHINE = {
@@ -81,6 +89,7 @@ var STATE = {
   enabled: CONFIG.defaultEnabled,
   tempSetpointC: CONFIG.defaultTempSetpointC,
   humiditySetpointRh: CONFIG.defaultHumiditySetpointRh,
+  humiditySetpointEffectiveRh: CONFIG.defaultHumiditySetpointRh,
 
   externalTempC: null,
   externalTempTs: 0,
@@ -116,7 +125,18 @@ var STATE = {
 
   lastFaultCode: "none",
   lastPublishedAt: 0,
-  lastDecision: "startup"
+  lastDecision: "startup",
+
+  compressorStarts: 0,
+  condensingTotalS: 0,
+  dryingActiveTotalS: 0,
+  recentWindowTotalS: 0,
+  recentWindowCondensingS: 0,
+  recentDryingCompressorS: 0,
+  recentDryingCondensingS: 0,
+  dryingIneffective: false,
+  dryingIneffectiveReason: "none",
+  lastLoopTs: 0
 };
 
 function nowS() {
@@ -190,8 +210,15 @@ var DISCOVERY_MINIMAL_ENTITIES = [
 
 var DISCOVERY_EXTENDED_ONLY_ENTITIES = [
   { component: "sensor", key: "control_temperature" },
+  { component: "sensor", key: "dew_temp_source" },
   { component: "sensor", key: "dew_point" },
   { component: "sensor", key: "plate_target" },
+  { component: "sensor", key: "plate_minus_dew" },
+  { component: "sensor", key: "condensing_margin" },
+  { component: "sensor", key: "condensing_recent_percent" },
+  { component: "sensor", key: "condensing_total" },
+  { component: "sensor", key: "drying_active_total" },
+  { component: "sensor", key: "drying_compressor_starts" },
   { component: "sensor", key: "target_humidity" },
   { component: "sensor", key: "learned_max_runtime" },
   { component: "sensor", key: "overshoot" },
@@ -206,8 +233,19 @@ var DISCOVERY_EXTENDED_ONLY_ENTITIES = [
   { component: "binary_sensor", key: "drying_overtemp_suspend" },
   { component: "binary_sensor", key: "humidity_control_available" },
   { component: "binary_sensor", key: "drying_mode_requested" },
+  { component: "binary_sensor", key: "condensing_now" },
+  { component: "binary_sensor", key: "drying_ineffective" },
   // Ancienne entité historique à purger.
   { component: "climate", key: "climate" }
+];
+
+var DISCOVERY_CONDENSATION_DIAG_ENTITIES = [
+  { component: "sensor", key: "dew_point" },
+  { component: "sensor", key: "plate_target" },
+  { component: "sensor", key: "plate_minus_dew" },
+  { component: "sensor", key: "cool_reason" },
+  { component: "sensor", key: "drying_block_reason" },
+  { component: "binary_sensor", key: "condensing_now" }
 ];
 
 function purgeDiscoveryEntityList(entities) {
@@ -223,6 +261,7 @@ function purgeDiscoveryConfigs() {
   // Purge minimal + héritage étendu/legacy pour éviter les entités fantômes.
   purgeDiscoveryEntityList(DISCOVERY_MINIMAL_ENTITIES);
   purgeDiscoveryEntityList(DISCOVERY_EXTENDED_ONLY_ENTITIES);
+  purgeDiscoveryEntityList(DISCOVERY_CONDENSATION_DIAG_ENTITIES);
 }
 
 function haDeviceInfo() {
@@ -310,6 +349,51 @@ function publishAllDiscoveryConfigs() {
     value_template: "{{ value_json.fault | default(none) }}"
   });
 
+  if (CONFIG.discoveryCondensationDiagnosticsEnabled) {
+    publishDiscoveryConfig("sensor", "dew_point", {
+      name: "Cave Dew Point",
+      state_topic: stateTopic,
+      value_template: "{{ value_json.dew_point_c | default(none) }}",
+      device_class: "temperature",
+      unit_of_measurement: "°C"
+    });
+
+    publishDiscoveryConfig("sensor", "plate_target", {
+      name: "Cave Plate Target",
+      state_topic: stateTopic,
+      value_template: "{{ value_json.plate_target_c | default(none) }}",
+      device_class: "temperature",
+      unit_of_measurement: "°C"
+    });
+
+    publishDiscoveryConfig("sensor", "plate_minus_dew", {
+      name: "Cave Plate Minus Dew",
+      state_topic: stateTopic,
+      value_template: "{{ value_json.plate_minus_dew_c | default(none) }}",
+      unit_of_measurement: "°C"
+    });
+
+    publishDiscoveryConfig("sensor", "cool_reason", {
+      name: "Cave Cool Reason",
+      state_topic: stateTopic,
+      value_template: "{{ value_json.cool_reason | default(none) }}"
+    });
+
+    publishDiscoveryConfig("sensor", "drying_block_reason", {
+      name: "Cave Drying Block Reason",
+      state_topic: stateTopic,
+      value_template: "{{ value_json.drying_block_reason | default(none) }}"
+    });
+
+    publishDiscoveryConfig("binary_sensor", "condensing_now", {
+      name: "Cave Condensing Now",
+      state_topic: stateTopic,
+      value_template: "{{ value_json.condensing_now | string | lower }}",
+      payload_on: "true",
+      payload_off: "false"
+    });
+  }
+
   if (!CONFIG.discoveryExtendedEnabled) return;
 
   // Mode étendu optionnel: visibilité diagnostics complète, plus coûteuse en mémoire.
@@ -319,6 +403,12 @@ function publishAllDiscoveryConfigs() {
     value_template: "{{ value_json.control_temp_c | default(none) }}",
     device_class: "temperature",
     unit_of_measurement: "°C"
+  });
+
+  publishDiscoveryConfig("sensor", "dew_temp_source", {
+    name: "Cave Dew Temp Source",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.dew_temp_source | default(none) }}"
   });
 
   publishDiscoveryConfig("sensor", "dew_point", {
@@ -335,6 +425,49 @@ function publishAllDiscoveryConfigs() {
     value_template: "{{ value_json.plate_target_c | default(none) }}",
     device_class: "temperature",
     unit_of_measurement: "°C"
+  });
+
+  publishDiscoveryConfig("sensor", "plate_minus_dew", {
+    name: "Cave Plate Minus Dew",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.plate_minus_dew_c | default(none) }}",
+    unit_of_measurement: "°C"
+  });
+
+  publishDiscoveryConfig("sensor", "condensing_margin", {
+    name: "Cave Condensing Margin",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.condensing_margin_c | default(none) }}",
+    unit_of_measurement: "°C"
+  });
+
+  publishDiscoveryConfig("sensor", "condensing_recent_percent", {
+    name: "Cave Condensing Recent Percent",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.condensing_recent_percent | default(none) }}",
+    unit_of_measurement: "%"
+  });
+
+  publishDiscoveryConfig("sensor", "condensing_total", {
+    name: "Cave Condensing Total",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.condensing_total_s | default(none) }}",
+    device_class: "duration",
+    unit_of_measurement: "s"
+  });
+
+  publishDiscoveryConfig("sensor", "drying_active_total", {
+    name: "Cave Drying Active Total",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.drying_active_total_s | default(none) }}",
+    device_class: "duration",
+    unit_of_measurement: "s"
+  });
+
+  publishDiscoveryConfig("sensor", "drying_compressor_starts", {
+    name: "Cave Compressor Starts",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.compressor_starts | default(none) }}"
   });
 
   publishDiscoveryConfig("sensor", "target_humidity", {
@@ -434,10 +567,26 @@ function publishAllDiscoveryConfigs() {
 
   publishDiscoveryConfig("binary_sensor", "drying_mode_requested", {
     name: "Cave Drying Mode Requested",
-      state_topic: stateTopic,
-      value_template: "{{ value_json.drying_mode_requested | string | lower }}",
-      payload_on: "true",
-      payload_off: "false"
+    state_topic: stateTopic,
+    value_template: "{{ value_json.drying_mode_requested | string | lower }}",
+    payload_on: "true",
+    payload_off: "false"
+  });
+
+  publishDiscoveryConfig("binary_sensor", "condensing_now", {
+    name: "Cave Condensing Now",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.condensing_now | string | lower }}",
+    payload_on: "true",
+    payload_off: "false"
+  });
+
+  publishDiscoveryConfig("binary_sensor", "drying_ineffective", {
+    name: "Cave Drying Ineffective",
+    state_topic: stateTopic,
+    value_template: "{{ value_json.drying_ineffective | string | lower }}",
+    payload_on: "true",
+    payload_off: "false"
   });
 }
 
@@ -565,6 +714,22 @@ function beginPostCoolInertia(ts, plateTargetC, plateC) {
   STATE.postCoolLastC = isFiniteNumber(plateC) ? plateC : null;
 }
 
+function updateCondensingStats(dtS, condensingNow, coolingNow, dryingActiveNow) {
+  if (dtS <= 0) return;
+
+  var windowS = Math.max(60, CONFIG.condensingRecentWindowS);
+  var decay = 1.0 - (dtS / windowS);
+  if (decay < 0) decay = 0;
+
+  STATE.recentWindowTotalS = STATE.recentWindowTotalS * decay + dtS;
+  STATE.recentWindowCondensingS = STATE.recentWindowCondensingS * decay + (condensingNow ? dtS : 0);
+  STATE.recentDryingCompressorS = STATE.recentDryingCompressorS * decay + ((dryingActiveNow && coolingNow) ? dtS : 0);
+  STATE.recentDryingCondensingS = STATE.recentDryingCondensingS * decay + ((dryingActiveNow && condensingNow) ? dtS : 0);
+
+  if (condensingNow) STATE.condensingTotalS += dtS;
+  if (dryingActiveNow) STATE.dryingActiveTotalS += dtS;
+}
+
 function applyOutputs(nextCool, nextHeat, allowSimultaneous, reason, plateTargetC, plateC, ts, startPostCoolTracking) {
   if (typeof startPostCoolTracking !== "boolean") startPostCoolTracking = true;
   if (nextCool && nextHeat && !allowSimultaneous) {
@@ -577,6 +742,7 @@ function applyOutputs(nextCool, nextHeat, allowSimultaneous, reason, plateTarget
     STATE.coolOn = nextCool;
 
     if (nextCool) {
+      STATE.compressorStarts += 1;
       STATE.coolingStartedAt = ts;
       STATE.cycleStopReason = "none";
       STATE.lastPlateEvent = "none";
@@ -617,6 +783,7 @@ function controlLoop() {
       null,
       null,
       null,
+      "not_available",
       "temp_only",
       null,
       false,
@@ -628,6 +795,10 @@ function controlLoop() {
     );
     return;
   }
+
+  var dtS = 0;
+  if (STATE.lastLoopTs > 0 && ts > STATE.lastLoopTs) dtS = ts - STATE.lastLoopTs;
+  STATE.lastLoopTs = ts;
 
   var extTempOk = externalTempFresh(ts);
   var extHumOk = externalHumidityFresh(ts);
@@ -643,6 +814,13 @@ function controlLoop() {
   var humidityRh = extHumOk ? STATE.externalHumidityRh : null;
   var mode = extHumOk ? "temp+humidity" : "temp_only";
 
+  var dewTempSource = "local_air";
+  var dewTempC = airC;
+  if (CONFIG.dewPointTempSource === "external_if_fresh" && extTempOk) {
+    dewTempC = STATE.externalTempC;
+    dewTempSource = "external_fresh";
+  }
+
   if (!isFiniteNumber(plateC)) {
     publishFault("PLATE_SENSOR_MISSING", "warning", "Plate sensor unavailable; cooling blocked");
   } else {
@@ -653,7 +831,7 @@ function controlLoop() {
     }
   }
 
-  var dewC = extHumOk ? dewPointC(controlTempC, humidityRh) : null;
+  var dewC = extHumOk ? dewPointC(dewTempC, humidityRh) : null;
   var plateTargetC = null;
   if (isFiniteNumber(dewC)) {
     plateTargetC = dewC - CONFIG.dewTargetMarginC;
@@ -685,12 +863,20 @@ function controlLoop() {
     STATE.dryingOvertempSuspend = false;
   }
 
+  var rhSetpoint = clamp(STATE.humiditySetpointRh, CONFIG.humiditySetpointMinRh, CONFIG.humiditySetpointMaxRh);
+  STATE.humiditySetpointEffectiveRh = rhSetpoint;
+
   var dryingDemand = false;
   if (!STATE.dryingOvertempSuspend && extHumOk) {
+    var halfRhBand = CONFIG.humiditySetpointHysteresisRh / 2.0;
+    var rhOnDyn = rhSetpoint + halfRhBand;
+    var rhOffDyn = rhSetpoint - halfRhBand;
+    if (rhOffDyn >= rhOnDyn) rhOffDyn = rhOnDyn - 0.1;
+
     if (STATE.machineState === MACHINE.DRYING_ACTIVE) {
-      dryingDemand = humidityRh > CONFIG.rhOff;
+      dryingDemand = humidityRh > rhOffDyn;
     } else {
-      dryingDemand = humidityRh >= CONFIG.rhOn;
+      dryingDemand = humidityRh >= rhOnDyn;
     }
   }
 
@@ -825,6 +1011,24 @@ function controlLoop() {
     STATE.cycleStopReason = coolReason;
   }
 
+  var condensingNow = isFiniteNumber(plateC) && isFiniteNumber(dewC) && plateC < dewC;
+  updateCondensingStats(dtS, condensingNow, STATE.coolOn, STATE.machineState === MACHINE.DRYING_ACTIVE);
+
+  var dryingCondensingPct = null;
+  if (STATE.recentDryingCompressorS > 0.1) {
+    dryingCondensingPct = 100.0 * (STATE.recentDryingCondensingS / STATE.recentDryingCompressorS);
+  }
+
+  STATE.dryingIneffective = (nextState === MACHINE.DRYING_ACTIVE) &&
+    (STATE.recentDryingCompressorS >= CONFIG.dryingIneffectiveMinCompressorS) &&
+    isFiniteNumber(dryingCondensingPct) &&
+    (dryingCondensingPct < CONFIG.dryingIneffectiveMinCondensingPct);
+  STATE.dryingIneffectiveReason = STATE.dryingIneffective ? "insufficient_condensing_under_compressor" : "none";
+
+  if (STATE.dryingIneffective && coolReason === "drying_plate_target") {
+    coolReason = "drying_ineffective";
+  }
+
   STATE.machineState = nextState;
   STATE.coolReason = coolReason;
   STATE.heatReason = heatReason;
@@ -837,6 +1041,7 @@ function controlLoop() {
     controlTempC,
     humidityRh,
     dewC,
+    dewTempSource,
     mode,
     plateTargetC,
     allowSimultaneous,
@@ -855,6 +1060,7 @@ function publishState(
   controlTempC,
   humidityRh,
   dewC,
+  dewTempSource,
   mode,
   plateTargetC,
   allowSimultaneous,
@@ -869,7 +1075,8 @@ function publishState(
 
   mqttPublish("state", {
     enabled: STATE.enabled,
-    target_humidity_rh: STATE.humiditySetpointRh,
+    target_humidity_rh: STATE.humiditySetpointEffectiveRh,
+    target_humidity_requested_rh: STATE.humiditySetpointRh,
     mode: mode,
     machine_state: STATE.machineState,
     cool_reason: STATE.coolReason,
@@ -884,8 +1091,20 @@ function publishState(
     drying_mode_requested: dryingModeRequested,
     drying_block_reason: dryingBlockReason,
     humidity_mode: humidityMode,
+    dew_temp_source: dewTempSource,
     dew_point_c: dewC,
     plate_target_c: plateTargetC,
+    plate_minus_dew_c: (isFiniteNumber(plateC) && isFiniteNumber(dewC)) ? (plateC - dewC) : null,
+    condensing_now: (isFiniteNumber(plateC) && isFiniteNumber(dewC)) ? (plateC < dewC) : false,
+    condensing_margin_c: (isFiniteNumber(plateC) && isFiniteNumber(dewC) && plateC < dewC) ? (dewC - plateC) : null,
+    condensing_total_s: STATE.condensingTotalS,
+    drying_active_total_s: STATE.dryingActiveTotalS,
+    condensing_recent_percent: STATE.recentWindowTotalS > 0.1 ? (100.0 * STATE.recentWindowCondensingS / STATE.recentWindowTotalS) : null,
+    compressor_starts: STATE.compressorStarts,
+    drying_ineffective: STATE.dryingIneffective,
+    drying_ineffective_reason: STATE.dryingIneffectiveReason,
+    drying_condensing_percent: STATE.recentDryingCompressorS > 0.1 ? (100.0 * STATE.recentDryingCondensingS / STATE.recentDryingCompressorS) : null,
+    drying_recent_compressor_s: STATE.recentDryingCompressorS,
     external_temp_fresh: externalTempFresh(ts),
     external_humidity_fresh: externalHumidityFresh(ts),
     cool_on: STATE.coolOn,

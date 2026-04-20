@@ -64,11 +64,11 @@ Objectif: valider **sécurité**, **priorités d'état**, **télémétrie** avan
 
 ## 8) DRYING_ACTIVE validation
 
-- **Action**: injecter RH > `rhOn` avec capteurs valides.
+- **Action**: injecter RH > `target_humidity_rh + (humiditySetpointHysteresisRh/2)` avec capteurs valides.
 - **Télémétrie**: `machine_state`, `cool_reason`, `heat_reason`, `simultaneous_mode_active`, `plate_target_c`.
 - **Attendu**: entrée `DRYING_ACTIVE`, simultané autorisé, compresseur piloté plaque, chauffage piloté consigne air dédiée.
 - **Danger/bug**: chauffage piloté directement par RH sans logique consigne air.
-- **Paramètre d'abord**: `rhOn/rhOff`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
+- **Paramètre d'abord**: `humiditySetpointHysteresisRh`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
 
 ## 9) POST_COOL_INERTIA validation
 
@@ -114,5 +114,30 @@ Objectif: valider **sécurité**, **priorités d'état**, **télémétrie** avan
 - **Danger/bug**: `plate_safety_block` fréquent, `learned_runtime_limit` à chaque cycle, défauts capteurs/MQTT répétés.
 - **Paramètre d'abord**:
   - sécurité: `plateMinOffC/plateMinResumeC`, `lockoutS`
-  - séchage: `rhOn/rhOff`, `dewTargetMarginC`
+  - séchage: `target_humidity_rh` + `humiditySetpointHysteresisRh`, `dewTargetMarginC`
   - runtime: `adaptiveCoolMax*`, `adaptiveCoolOvershootStepDownS`
+
+## 14) Validation `drying_ineffective` (transitions)
+
+- **Action**:
+  1. Forcer une demande de séchage durable (`RH` au-dessus du seuil ON).
+  2. Observer d'abord une phase où la plaque passe bien sous rosée.
+  3. Simuler ensuite un cas défavorable (plaque qui reste proche/au-dessus de rosée malgré compresseur actif).
+- **Télémétrie**: `machine_state`, `cool_on`, `condensing_now`, `drying_condensing_percent`, `drying_recent_compressor_s`, `drying_ineffective`, `drying_ineffective_reason`, `cool_reason`.
+- **Attendu**:
+  - `drying_ineffective=false` tant que la part de condensation reste suffisante.
+  - `drying_ineffective=true` seulement après dépassement de `dryingIneffectiveMinCompressorS` et si `drying_condensing_percent` < `dryingIneffectiveMinCondensingPct`.
+  - retour à `drying_ineffective=false` quand la condensation redevient suffisante.
+- **Danger/bug**: `drying_ineffective` bascule trop tôt (avant durée mini), ou reste bloqué malgré retour de condensation.
+- **Paramètre d'abord**: `dryingIneffectiveMinCompressorS`, `dryingIneffectiveMinCondensingPct`, `condensingRecentWindowS`.
+
+## 15) Contrôle mémoire discovery (Shelly)
+
+- **Action**:
+  1. Démarrer avec `discoveryExtendedEnabled=false` et `discoveryCondensationDiagnosticsEnabled=true`.
+  2. Vérifier boot + publication discovery + boucle de régulation stable.
+  3. Si besoin, comparer avec `discoveryCondensationDiagnosticsEnabled=false` (profil minimal strict).
+- **Télémétrie**: logs Shelly (absence d'`out of memory`), disponibilité MQTT `state/fault`.
+- **Attendu**: pas d'erreur mémoire, discovery publié, régulation inchangée.
+- **Danger/bug**: erreurs mémoire au boot ou messages MQTT manquants après publication discovery.
+- **Paramètre d'abord**: `discoveryCondensationDiagnosticsEnabled`, puis `discoveryExtendedEnabled`.

@@ -40,11 +40,13 @@ Objet HA (identifiant logique) : `cave_saucisson`
 - Topic : `fdp_communs_cave_saucissons/cave_saucisson/state`
 - Fréquence : toutes les `mqttPublishMs` (5000 ms par défaut) + événements importants
 - Champs clés publiés :
-  - `enabled`, `target_humidity_rh`
+  - `enabled`, `target_humidity_rh`, `target_humidity_requested_rh`
   - `machine_state` : `IDLE|COOLING|POST_COOL_INERTIA|HEATING|DRYING_ACTIVE|FAULT`
   - `cool_reason`, `heat_reason`
   - `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`
-  - `dew_point_c`, `plate_target_c`
+  - `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`, `condensing_margin_c`
+  - `condensing_total_s`, `drying_active_total_s`, `condensing_recent_percent`, `compressor_starts`
+  - `drying_ineffective`, `drying_ineffective_reason`, `drying_condensing_percent`, `drying_recent_compressor_s`
   - `cycle_stop_reason`, `last_plate_event`, `last_post_cool_finalize_reason`, `last_min_plate_after_stop_c`, `overshoot_c`
   - `learned_max_runtime_s`
   - `drying_overtemp_suspend` (suspension temporaire du séchage actif sur surchauffe ambiance)
@@ -56,6 +58,7 @@ Payload JSON (exemple) :
 {
   "enabled": true,
   "target_humidity_rh": 78.0,
+  "target_humidity_requested_rh": 82.0,
   "mode": "temp+humidity",
   "machine_state": "DRYING_ACTIVE",
   "cool_reason": "drying_plate_target",
@@ -70,8 +73,18 @@ Payload JSON (exemple) :
   "drying_mode_requested": true,
   "drying_block_reason": "none",
   "humidity_mode": "external_valid",
+  "dew_temp_source": "local_air",
   "dew_point_c": 8.9,
   "plate_target_c": 7.9,
+  "plate_minus_dew_c": -1.2,
+  "condensing_now": true,
+  "condensing_margin_c": 1.2,
+  "condensing_total_s": 5400,
+  "drying_active_total_s": 9200,
+  "condensing_recent_percent": 41.8,
+  "compressor_starts": 33,
+  "drying_ineffective": false,
+  "drying_ineffective_reason": "none",
   "cool_on": true,
   "heat_on": true,
   "cycle_stop_reason": "drying_plate_hysteresis",
@@ -87,10 +100,12 @@ Payload JSON (exemple) :
 
 Sémantique humidité explicite :
 
+- `target_humidity_requested_rh` : consigne brute demandée via MQTT/HA (non bornée).
+- `target_humidity_rh` : consigne effectivement utilisée par la régulation (consigne demandée bornée par `humiditySetpointMinRh..humiditySetpointMaxRh`).
 - `humidity_control_available` : humidité externe exploitable (`true`) ou non (`false`).
 - `humidity_demand_active` : demande séchage active selon hystérésis RH.
 - `drying_mode_requested` : conditions DRYING remplies avant arbitrages de priorité globaux.
-- `drying_block_reason` : `none|humidity_stale|below_rh_off|overtemp_suspend|no_plate_target`.
+- `drying_block_reason` : `none|humidity_stale|overtemp_suspend|no_humidity_request|no_plate_target`.
 - `humidity_mode` : `external_valid|external_stale|not_available`.
 
 ### 2) Défauts / événements
@@ -135,7 +150,7 @@ Entités publiées :
 - `homeassistant/sensor/cave_saucisson_machine_state/config`
 - `homeassistant/sensor/cave_saucisson_fault/config`
 
-Ce profil limite le pic mémoire au boot (moins de payloads JSON retained et zéro `binary_sensor`).
+Ce profil limite le pic mémoire au boot (moins de payloads JSON retained) tout en conservant un mini diagnostic condensation optionnel (`CONFIG.discoveryCondensationDiagnosticsEnabled=true`).
 
 #### 2) Mode étendu (optionnel)
 
