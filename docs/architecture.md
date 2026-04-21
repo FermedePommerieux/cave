@@ -88,6 +88,7 @@ Contraintes de robustesse discovery Home Assistant:
 - Le compresseur est piloté par la cible plaque autour du point de rosée (hystérésis ON/OFF simple).
 - Le chauffage en déshumidification est une compensation thermique explicite: si `airC < dryingAirSetpointC`, chauffage forcé ON (sous réserve des sécurités globales).
 - Simultané chauffage + compresseur autorisé **uniquement** en déshumidification active.
+- Si l'air devient trop froid (`airC <= heatOnC`), le compresseur est bloqué (latch avec reprise à `airC >= heatOffC`), y compris en `DRYING_ACTIVE`.
 - Si `airC >= hardMaxAirC`, la sécurité ambiance prime (chauffage coupé, froid de protection autorisé selon sécurité plaque + lockout).
 
 ## Priorités de sécurité
@@ -95,7 +96,7 @@ Contraintes de robustesse discovery Home Assistant:
 Ordre de priorité :
 
 1. Défaut critique capteur air local => état `FAULT`, tout OFF
-2. Protection plaque froide / anti-gel
+2. Protection plaque froide / anti-gel + blocage compresseur air trop froid
 3. Interdiction simultané chauffage/froid hors `DRYING_ACTIVE`
 4. Verrou anti-cycles compresseur (`lockoutS`)
 5. Régulation fine thermique/hygrométrique
