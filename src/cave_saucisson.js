@@ -130,10 +130,11 @@ function parseNumericPayload(payload) {
   return n;
 }
 
-function mqttPublish(subTopic, obj) {
+function mqttPublish(subTopic, obj, retain) {
   if (typeof MQTT === "undefined") return;
+  if (typeof retain !== "boolean") retain = false;
   var fullTopic = CONFIG.mqttPrefix + "/" + CONFIG.haObjectId + "/" + subTopic;
-  MQTT.publish(fullTopic, JSON.stringify(obj), 0, false);
+  MQTT.publish(fullTopic, JSON.stringify(obj), 0, retain);
 }
 
 function mqttPublishRetained(topic, obj) {
@@ -244,6 +245,8 @@ function publishAllDiscoveryConfigs() {
     mode_state_template: "{% if value_json.enabled %}auto{% else %}off{% endif %}",
     mode_command_topic: baseTopic + "/set/mode",
     modes: ["off", "auto"],
+    action_topic: stateTopic,
+    action_template: "{% if value_json.enabled == false %}off{% elif value_json.dehum_active == true %}drying{% else %}idle{% endif %}",
     current_humidity_topic: stateTopic,
     current_humidity_template: "{{ value_json.humidity_rh }}",
     target_humidity_state_topic: stateTopic,
@@ -701,7 +704,7 @@ function publishState(
     decision: STATE.lastDecision,
     fault: STATE.lastFaultCode,
     ts: ts
-  });
+  }, true);
 }
 
 function mqttInit() {
