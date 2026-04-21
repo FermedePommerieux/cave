@@ -4,6 +4,12 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.9] - 2026-04-21
+
+### Fixed
+- Correction minimale de la discovery MQTT Home Assistant de l'entité `humidifier`: alignement `state_value_template` avec `payload_on/payload_off` (`auto`/`off`) et template d'action simplifié pour publier strictement `off|drying|idle`.
+- Robustesse `current_humidity_template` renforcée avec `default(none)` pour éviter les états invalides si `humidity_rh` est absent/null.
+
 ## [0.2.8] - 2026-04-21
 
 ### Changed
