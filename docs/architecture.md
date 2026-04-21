@@ -23,13 +23,16 @@ Le système repose sur un script Shelly unique qui :
 
 - `switch:0` : compresseur
 - `switch:1` : chauffage
-- MQTT : état, mode, défauts, fraîcheur capteurs
+- MQTT : état (retained), mode, défauts, fraîcheur capteurs
 - MQTT Discovery Home Assistant (retained) : publication au boot
 
 Contraintes de robustesse discovery Home Assistant:
 - publication en JSON strict uniquement
 - pas de champs `null`/`undefined` dans les payloads `.../config`
 - capteurs booléens publiés en binary_sensor avec mapping explicite `payload_on="true"` / `payload_off="false"`
+- entité principale `humidifier` (`device_class=dehumidifier`) avec:
+  - état `auto|off` (`state_value_template` et `mode_state_template`)
+  - action courante `off|idle|drying` (`action_topic` + `action_template`)
 - templates discovery défensifs (`default(none)` pour numériques) pour éviter des états `unknown` cassants côté HA
 - mode discovery minimal par défaut (`CONFIG.discoveryExtendedEnabled=false`) pour sobriété mémoire:
   - `humidifier` + capteurs essentiels (`air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`)

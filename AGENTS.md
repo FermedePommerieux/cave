@@ -13,7 +13,7 @@ Ce dépôt maintient un **projet embarqué Shelly Script** pour cave à saucisso
 
 ## Invariants de sécurité (non négociables)
 
-1. **Jamais chauffage et froid simultanés**.
+1. **Le simultané chauffage + froid est interdit sauf en `DRYING_ACTIVE`, où il est autorisé uniquement comme compensation thermique explicite.**
 2. Si température air locale indisponible : arrêt actionneurs + publication défaut.
 3. Fallback température externe MQTT invalide/périmée -> sonde air locale.
 4. Fallback humidité MQTT invalide/périmée -> mode température seule.
