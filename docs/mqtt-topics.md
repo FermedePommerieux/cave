@@ -49,6 +49,7 @@ Objet HA (identifiant logique) : `cave_saucisson`
   - `dehum_active`
   - `cycle_stop_reason`, `last_plate_event`
   - `drying_overtemp_suspend` (suspension temporaire du séchage actif sur surchauffe ambiance)
+  - `air_too_cold_for_cooling_latch` (blocage froid par air trop froid, y compris en `DRYING_ACTIVE`)
   - `simultaneous_mode_active` (true seulement en `DRYING_ACTIVE`)
 
 Payload JSON (exemple) :
@@ -95,6 +96,7 @@ Sémantique humidité explicite :
 - `humidity_demand_active` : demande séchage active selon hystérésis RH.
 - `drying_mode_requested` : conditions DRYING remplies avant arbitrages de priorité globaux.
 - `drying_block_reason` : `none|humidity_stale|overtemp_suspend|no_humidity_request|no_plate_target`.
+- `cool_reason` peut exposer `air_too_cold_block` quand le compresseur est bloqué par air trop froid.
 - `humidity_mode` : `external_valid|external_stale|not_available`.
 
 Comportement observable après reboot (boot sûr) :

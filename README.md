@@ -11,6 +11,7 @@ Maintenir des conditions stables pour l'affinage en donnant la priorité à la s
 - prévention du gel (plaque froide)
 - simultané chauffage + froid interdit sauf en mode séchage actif
 - déshumidification uniquement par condensation sur plaque froide
+- si air trop froid, le compresseur est bloqué (y compris en séchage actif)
 - consigne humidité Home Assistant réellement utilisée (hystérésis autour de la consigne utilisateur)
 - mode dégradé automatique si capteurs MQTT externes invalides
 

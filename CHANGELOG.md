@@ -4,6 +4,37 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.3.2] - 2026-04-21
+
+### Changed
+- Simplification forte du script V2 pour recentrer la régulation sur la logique métier cave (`~12°C`, enveloppe pratique `10..14°C`, humidité pilotée), avec réduction marquée de la complexité hors MQTT/discovery.
+- Fusion de la décision métier dans un noyau compact (`computeDecision` + `applyDecision`) pour limiter les branches dispersées.
+
+### Safety
+- Maintien des garde-fous prioritaires: coupure chauffage en surchauffe (`hardMaxAirC`), blocage compresseur si air trop froid (y compris en `DRYING_ACTIVE`), anti-gel plaque, lockout compresseur, défaut capteur air => `FAULT` et sorties OFF.
+
+## [0.3.1] - 2026-04-21
+
+### Fixed
+- Application stricte de la règle "air trop froid => compresseur coupé" y compris en `DRYING_ACTIVE`, avec latch hystérésé (`airC <= heatOnC` bloque, `airC >= heatOffC` autorise la reprise).
+- Nouvelle raison de blocage froid télémétrée: `cool_reason="air_too_cold_block"`.
+- Nouveau champ `state` de visibilité sécurité: `air_too_cold_for_cooling_latch`.
+
+### Documentation
+- README, architecture et topics MQTT mis à jour pour documenter le blocage compresseur par air trop froid en mode séchage actif.
+
+## [0.3.0] - 2026-04-21
+
+### Changed
+- Réécriture complète du script `src/cave_saucisson.js` en V2 KISS: architecture simplifiée et linéaire (`CONFIG`/`MACHINE`/`STATE`/helpers/acquisition/décision/sorties/publication/bootstrap) sans dépendance runtime additionnelle.
+- Conservation des états machine cibles (`IDLE`, `COOLING`, `HEATING`, `DRYING_ACTIVE`, `FAULT`) avec arbitrage explicite et fonctions courtes à responsabilité unique.
+- Conservation de la compatibilité MQTT utile production/HA (`state` retained, `fault`, commandes `set/mode` et `set/target_humidity`, topics capteurs externes).
+- Conservation de la discovery Home Assistant existante (profil minimal par défaut, profil condensation étendu optionnel, purge + republication retained au boot).
+
+### Safety
+- Bootstrap sûr conservé et clarifié: forçage matériel des relais OFF, resynchronisation runtime, lockout compresseur immédiat (`lockoutS`).
+- Invariants sécurité conservés: arrêt total en défaut sonde air locale, fallback température externe->air local, fallback humidité externe->mode température seule, anti-gel plaque latché, interdiction heat+cool hors `DRYING_ACTIVE`, compensation thermique explicite en `DRYING_ACTIVE`, priorité `hardMaxAirC`.
+
 ## [0.2.10] - 2026-04-21
 
 ### Fixed
