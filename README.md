@@ -84,7 +84,7 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 1. **First-start (obligatoire)** : `plateMinOffC`, `plateMinResumeC`, `lockoutS`, `hardMaxAirC`, `dryingResumeBelowHardMaxC`.
 2. **Régulation de base** : `coolOnC`, `coolOffC`, `heatOnC`, `heatOffC`, `heatDisableAboveC`.
 3. **Séchage** : `humiditySetpointHysteresisRh`, `humiditySetpointMinRh`, `humiditySetpointMaxRh`, `dewTargetMarginC`, `plateTargetHysteresisC`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
-4. **Affinage avancé compresseur** : `adaptiveCool*`, `inertia*`, `postCool*`.
+4. **Validation terrain KISS** : vérifier stabilité plaque (`dewTargetMarginC`, `plateTargetHysteresisC`) et sécurité compresseur (`lockoutS`).
 
 > Règle simple: ne modifier qu'un groupe à la fois, puis observer au moins 24h de cycles.
 
@@ -117,24 +117,11 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 | `plateMinOffC` | 0.0 | Coupure froid anti-gel | plaque approche 0 trop souvent | protection coupe trop tôt | déshumidification limitée | gel plaque possible | **High / Safety** |
 | `plateMinResumeC` | 3.0 | Température de reprise après latch | reprise trop rapide à plaque encore froide | reprise trop tardive | arrêts froid longs | reprises agressives | **High / Safety** |
 
-### Protection compresseur / apprentissage runtime
+### Protection compresseur (KISS)
 
 | Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
 |---|---:|---|---|---|---|---|---|
 | `lockoutS` | 180 | Délai mini entre démarrages | redémarrages trop serrés | temps mort trop long | régulation lente | short-cycle compresseur | **High / Safety** |
-| `adaptiveCoolMaxInitialS` | 240 | Limite initiale cycle froid | cycles coupés trop tôt au démarrage | overshoot initial fort | cycles initiaux trop longs | apprentissage trop lent | Medium |
-| `adaptiveCoolMaxMinS` | 120 | borne basse runtime appris | runtime tombe trop bas et coupe trop vite | besoin cycles plus courts protégés | cycles trop longs mini | runtime inutilement court | Medium |
-| `adaptiveCoolMaxMaxS` | 480 | borne haute runtime appris | runtime plafonne trop bas | cycles longs dangereux | sur-refroidissement | ne peut pas tenir charge | Medium |
-| `adaptiveCoolOvershootStepDownS` | 30 | réduction runtime si overshoot >2°C | overshoot persiste plusieurs cycles | runtime chute trop brutalement | apprentissage lent | instabilité/coupures fréquentes | Low |
-
-### Inertie post-arrêt (apprentissage overshoot)
-
-| Paramètre | Défaut | Effet terrain | Augmenter si... | Diminuer si... | Risque trop haut | Risque trop bas | Priorité |
-|---|---:|---|---|---|---|---|---|
-| `inertiaMaxS` | 420 | timeout dur observation post-cool | inertie réelle non captée à temps | sortie inertie trop tardive | blocage prolongé en `POST_COOL_INERTIA` | minima post-stop ratés | Medium |
-| `inertiaRiseFinishDeltaC` | 0.2 | sortie rapide quand plaque remonte de +delta | sortie trop précoce | sortie trop tardive | fin inertie tardive | mesure minima incomplète | Medium |
-| `postCoolMinDeltaC` | 0.05 | seuil “nouveau minimum significatif” | bruit capteur déclenche faux minima | minima réels ignorés | inertie trop longue | apprentissage appauvri | Low |
-| `postCoolStableWindowS` | 60 | sortie si plus de nouveau mini significatif | trop de bruit lente sortie | sortie trop lente | temps OFF excessif | sortie prématurée | Low |
 
 ### Protection ambiance (priorité sur séchage)
 
@@ -145,38 +132,33 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 
 ### Réponses rapides aux problèmes terrain
 
-- **“La plaque overshoot trop”**: vérifier d'abord `dewTargetMarginC`, puis `adaptiveCoolOvershootStepDownS`, puis `inertiaRiseFinishDeltaC` / `postCoolStableWindowS`.
+- **“La plaque trop froide trop souvent”**: vérifier d'abord `dewTargetMarginC`, puis `plateTargetHysteresisC`, puis `plateMinOffC/plateMinResumeC`.
 - **“Séchage trop faible”**: vérifier d'abord validité RH MQTT, puis `target_humidity_rh` + `humiditySetpointHysteresisRh`, puis `dewTargetMarginC` (trop faible) et blocage `plate_too_cold_latch`.
 - **“Reprise DRYING trop agressive après surchauffe”**: augmenter `dryingResumeBelowHardMaxC` (écart plus grand sous `hardMaxAirC`).
-- **“Cycles compresseur trop courts”**: vérifier `lockoutS`, puis `plateTargetHysteresisC`, puis `adaptiveCoolMaxMinS`.
-- **“Cycles compresseur trop longs”**: vérifier `adaptiveCoolMaxMaxS`, puis `adaptiveCoolOvershootStepDownS`, puis `dewTargetMarginC`.
+- **“Cycles compresseur trop courts”**: vérifier `lockoutS`, puis `plateTargetHysteresisC`.
+- **“Cycles compresseur trop longs”**: vérifier `dewTargetMarginC`, puis `plateTargetHysteresisC`.
 
 ---
 
 ## Télémétrie à surveiller en priorité au démarrage
 
-Top 6 startup : `machine_state`, `cool_reason`, `heat_reason`, `plate_too_cold_latch`, `post_cool_active`, `fault`.
+Top 6 startup : `machine_state`, `cool_reason`, `heat_reason`, `plate_too_cold_latch`, `dehum_active`, `fault`.
 
-Diagnostic condensation (noyau conservé): `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`, `drying_ineffective`.
+Diagnostic condensation (noyau conservé): `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`.
 
 Visibilité humidité (diagnostic rapide) : `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`.
 Consigne humidité : `target_humidity_requested_rh` (demande brute) vs `target_humidity_rh` (consigne effective bornée).
 
 | Champ | Lecture opérationnelle | Normal attendu | Alerte terrain |
 |---|---|---|---|
-| `machine_state` | état machine courant | alternance `IDLE/COOLING`, `DRYING_ACTIVE` seulement RH haute | bloqué en `FAULT` ou `POST_COOL_INERTIA` trop long |
+| `machine_state` | état machine courant | alternance `IDLE/COOLING`, `DRYING_ACTIVE` seulement RH haute | bloqué en `FAULT` ou en état actif anormalement long |
 | `cool_reason` | raison froid | `thermal_demand`, `drying_plate_target` | `plate_safety_block` récurrent |
-| `heat_reason` | raison chauffage | `low_temp_protection` ou `drying_air_setpoint` | chauffage actif alors air déjà haut |
+| `heat_reason` | raison chauffage | `low_temp_protection` ou `dehum_comp_forced_below_setpoint` | chauffage actif alors air déjà haut |
 | `simultaneous_mode_active` | autorisation simultané heat+cool | `true` seulement en `DRYING_ACTIVE` | `true` hors DRYING = anomalie logique |
 | `plate_too_cold_latch` | latch anti-gel plaque | `false` la plupart du temps | `true` fréquent = plaque trop froide / marge trop agressive |
 | `drying_overtemp_suspend` | DRYING suspendu par surchauffe air | `false` en régime stable | `true` fréquent = air trop haut, ajuster `hardMaxAirC`/reprise |
-| `cycle_stop_reason` | cause arrêt compresseur cycle en cours | cohérente avec mode (`drying_plate_hysteresis`, `thermal_demand`, etc.) | `learned_runtime_limit` systématique = runtime trop bas |
+| `cycle_stop_reason` | cause arrêt compresseur cycle en cours | cohérente avec mode (`drying_plate_hysteresis`, `thermal_demand`, `lockout`, etc.) | causes incohérentes ou oscillations rapides répétées |
 | `last_plate_event` | événement plaque récent | `plate_target_reached` parfois en DRYING | jamais atteint en DRYING = condensation faible |
-| `last_post_cool_finalize_reason` | fin de suivi inertie | `plate_rising` ou `plate_stable` | toujours `timeout` = réglages inertie à revoir |
-| `last_min_plate_after_stop_c` | minimum plaque post-stop | cohérent > gel | dérive sous 0°C = risque gel |
-| `overshoot_c` | overshoot post-cool | modéré | >2°C fréquent = agressivité froide trop forte |
-| `learned_max_runtime_s` | limite runtime apprise | se stabilise après quelques cycles | descend constamment au minimum |
-| `post_cool_active` | suivi inertie actif | `true` juste après arrêt compresseur | reste `true` anormalement longtemps |
 | `fault` | dernier défaut | `none` la majorité du temps | défauts répétés capteurs/MQTT |
 
 ## Sécurité
