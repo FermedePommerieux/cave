@@ -41,13 +41,12 @@ Objet HA (identifiant logique) : `cave_saucisson`
 - Fréquence : toutes les `mqttPublishMs` (5000 ms par défaut) + événements importants
 - Champs clés publiés :
   - `enabled`, `target_humidity_rh`, `target_humidity_requested_rh`
-  - `machine_state` : `IDLE|COOLING|POST_COOL_INERTIA|HEATING|DRYING_ACTIVE|FAULT`
+  - `machine_state` : `IDLE|COOLING|HEATING|DRYING_ACTIVE|FAULT`
   - `cool_reason`, `heat_reason`
   - `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`
   - `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`
-  - `drying_ineffective`
-  - `cycle_stop_reason`, `last_plate_event`, `last_post_cool_finalize_reason`, `last_min_plate_after_stop_c`, `overshoot_c`
-  - `learned_max_runtime_s`
+  - `dehum_active`
+  - `cycle_stop_reason`, `last_plate_event`
   - `drying_overtemp_suspend` (suspension temporaire du séchage actif sur surchauffe ambiance)
   - `simultaneous_mode_active` (true seulement en `DRYING_ACTIVE`)
 
@@ -61,7 +60,7 @@ Payload JSON (exemple) :
   "mode": "temp+humidity",
   "machine_state": "DRYING_ACTIVE",
   "cool_reason": "drying_plate_target",
-  "heat_reason": "drying_air_setpoint",
+  "heat_reason": "dehum_comp_forced_below_setpoint",
   "simultaneous_mode_active": true,
   "air_c": 12.2,
   "plate_c": 5.4,
@@ -71,21 +70,17 @@ Payload JSON (exemple) :
   "humidity_demand_active": true,
   "drying_mode_requested": true,
   "drying_block_reason": "none",
+  "dehum_active": true,
   "humidity_mode": "external_valid",
   "dew_temp_source": "local_air",
   "dew_point_c": 8.9,
   "plate_target_c": 7.9,
   "plate_minus_dew_c": -1.2,
   "condensing_now": true,
-  "drying_ineffective": false,
   "cool_on": true,
   "heat_on": true,
   "cycle_stop_reason": "drying_plate_hysteresis",
   "last_plate_event": "plate_target_reached",
-  "last_post_cool_finalize_reason": "plate_stable",
-  "last_min_plate_after_stop_c": 6.8,
-  "overshoot_c": 1.1,
-  "learned_max_runtime_s": 225,
   "drying_overtemp_suspend": false,
   "fault": "none"
 }

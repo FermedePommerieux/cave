@@ -4,6 +4,21 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.8] - 2026-04-21
+
+### Changed
+- Refonte KISS de la boucle de régulation: séparation explicite des demandes thermique air / déshumidification / pilotage plaque, avec priorités sécurité conservées.
+- En déshumidification active, chauffage de compensation forcé si `airC < dryingAirSetpointC` (jamais piloté directement par l'humidité).
+- Pilotage compresseur simplifié en déshumidification: hystérésis plaque autour de `plateTargetC = dewPointC - dewTargetMarginC`.
+
+### Removed
+- Retrait du suivi `POST_COOL_INERTIA` de la décision runtime.
+- Retrait de l'apprentissage runtime compresseur (`learnedCoolMaxS`, overshoot, adaptation dynamique) dans la boucle de régulation.
+- Retrait des diagnostics glissants de condensation utilisés dans la décision (`drying_ineffective` et compteurs associés).
+
+### Documentation
+- README + architecture + topics MQTT alignés avec la nouvelle architecture KISS et la télémétrie simplifiée (`dehum_active`, suppression des champs inertie/apprentissage).
+
 ## [0.2.7] - 2026-04-20
 
 ### Fixed

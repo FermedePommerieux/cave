@@ -49,17 +49,6 @@ var CONFIG = {
   plateTargetHysteresisC: 0.6,
   dewPointTempSource: "local_air", // "local_air" | "external_if_fresh"
 
-  adaptiveCoolMaxInitialS: 240,
-  adaptiveCoolMaxMinS: 120,
-  adaptiveCoolMaxMaxS: 480,
-  adaptiveCoolOvershootStepDownS: 30,
-
-  // Fin inertie: timeout dur, rebond rapide ou stabilité des minima.
-  inertiaMaxS: 420,
-  inertiaRiseFinishDeltaC: 0.2,
-  postCoolMinDeltaC: 0.05,
-  postCoolStableWindowS: 60,
-
   loopMs: 5000,
   mqttPublishMs: 5000,
   // Discovery HA allégé par défaut pour limiter RAM/CPU au boot Shelly.
@@ -70,16 +59,11 @@ var CONFIG = {
   discoveryDebugEnabled: false,
   discoveryDebugTopicSuffix: "debug/discovery_payload",
 
-  // Fenêtre glissante (approchée) pour diagnostiquer l'efficacité de condensation.
-  condensingRecentWindowS: 1800,
-  dryingIneffectiveMinCompressorS: 600,
-  dryingIneffectiveMinCondensingPct: 25
 };
 
 var MACHINE = {
   IDLE: "IDLE",
   COOLING: "COOLING",
-  POST_COOL_INERTIA: "POST_COOL_INERTIA",
   HEATING: "HEATING",
   DRYING_ACTIVE: "DRYING_ACTIVE",
   FAULT: "FAULT"
@@ -107,35 +91,14 @@ var STATE = {
   lastPostCoolFinalizeReason: "none",
 
   coolingLockoutUntil: 0,
-  coolingStartedAt: 0,
-  learnedCoolMaxS: CONFIG.adaptiveCoolMaxInitialS,
-  learnedCoolReady: false,
-
   plateTooColdLatch: false,
   dryingOvertempSuspend: false,
-
-  postCoolActive: false,
-  postCoolStartedAt: 0,
-  postCoolTargetC: null,
-  postCoolMinC: null,
-  postCoolLastMeaningfulMinAt: 0,
-  postCoolLastC: null,
-  lastPostCoolMinC: null,
-  lastOvershootC: null,
 
   lastFaultCode: "none",
   lastPublishedAt: 0,
   lastDecision: "startup",
 
-  compressorStarts: 0,
-  condensingTotalS: 0,
-  dryingActiveTotalS: 0,
-  recentWindowTotalS: 0,
-  recentWindowCondensingS: 0,
-  recentDryingCompressorS: 0,
-  recentDryingCondensingS: 0,
-  dryingIneffective: false,
-  dryingIneffectiveReason: "none",
+  dehumActive: false,
   lastLoopTs: 0
 };
 
@@ -401,106 +364,7 @@ function clamp(v, vmin, vmax) {
   return v;
 }
 
-function computeDryingHeatDemand(airC) {
-  var half = CONFIG.dryingAirHysteresisC / 2.0;
-  var onThreshold = CONFIG.dryingAirSetpointC - half;
-  var offThreshold = CONFIG.dryingAirSetpointC + half;
 
-  if (STATE.heatOn) {
-    if (airC >= offThreshold || airC >= CONFIG.heatDisableAboveC) return false;
-    return true;
-  }
-
-  if (airC <= onThreshold && airC < CONFIG.heatDisableAboveC) return true;
-  return false;
-}
-
-function updatePostCoolInertia(ts, plateC) {
-  if (!STATE.postCoolActive) return;
-  if (!isFiniteNumber(plateC)) {
-    finalizePostCoolInertia("plate_missing");
-    return;
-  }
-
-  if (!isFiniteNumber(STATE.postCoolMinC)) {
-    STATE.postCoolMinC = plateC;
-    STATE.postCoolLastMeaningfulMinAt = ts;
-  } else if (plateC < STATE.postCoolMinC) {
-    var dropC = STATE.postCoolMinC - plateC;
-    STATE.postCoolMinC = plateC;
-    if (dropC >= CONFIG.postCoolMinDeltaC) {
-      STATE.postCoolLastMeaningfulMinAt = ts;
-    }
-  }
-
-  var elapsed = ts - STATE.postCoolStartedAt;
-  var sinceMeaningfulMin = ts - STATE.postCoolLastMeaningfulMinAt;
-  var finishedByTimeout = elapsed >= CONFIG.inertiaMaxS;
-  var finishedByRise = isFiniteNumber(STATE.postCoolMinC) && plateC >= (STATE.postCoolMinC + CONFIG.inertiaRiseFinishDeltaC);
-  var finishedByStability = sinceMeaningfulMin >= CONFIG.postCoolStableWindowS;
-
-  STATE.postCoolLastC = plateC;
-
-  if (finishedByTimeout) {
-    finalizePostCoolInertia("timeout");
-  } else if (finishedByRise) {
-    finalizePostCoolInertia("plate_rising");
-  } else if (finishedByStability) {
-    finalizePostCoolInertia("plate_stable");
-  }
-}
-
-function finalizePostCoolInertia(reason) {
-  if (!STATE.postCoolActive) return;
-
-  STATE.lastPostCoolMinC = STATE.postCoolMinC;
-  if (isFiniteNumber(STATE.postCoolTargetC) && isFiniteNumber(STATE.postCoolMinC)) {
-    var overshoot = STATE.postCoolTargetC - STATE.postCoolMinC;
-    STATE.lastOvershootC = overshoot;
-    if (overshoot > 2.0) {
-      STATE.learnedCoolMaxS = Math.max(
-        CONFIG.adaptiveCoolMaxMinS,
-        STATE.learnedCoolMaxS - CONFIG.adaptiveCoolOvershootStepDownS
-      );
-      STATE.lastDecision = "learn_runtime_down:overshoot_" + overshoot.toFixed(2);
-    }
-  } else {
-    STATE.lastOvershootC = null;
-  }
-
-  STATE.postCoolActive = false;
-  STATE.postCoolStartedAt = 0;
-  STATE.postCoolTargetC = null;
-  STATE.postCoolMinC = null;
-  STATE.postCoolLastMeaningfulMinAt = 0;
-  STATE.postCoolLastC = null;
-  STATE.lastPostCoolFinalizeReason = reason;
-}
-
-function beginPostCoolInertia(ts, plateTargetC, plateC) {
-  STATE.postCoolActive = true;
-  STATE.postCoolStartedAt = ts;
-  STATE.postCoolTargetC = isFiniteNumber(plateTargetC) ? plateTargetC : null;
-  STATE.postCoolMinC = isFiniteNumber(plateC) ? plateC : null;
-  STATE.postCoolLastMeaningfulMinAt = ts;
-  STATE.postCoolLastC = isFiniteNumber(plateC) ? plateC : null;
-}
-
-function updateCondensingStats(dtS, condensingNow, coolingNow, dryingActiveNow) {
-  if (dtS <= 0) return;
-
-  var windowS = Math.max(60, CONFIG.condensingRecentWindowS);
-  var decay = 1.0 - (dtS / windowS);
-  if (decay < 0) decay = 0;
-
-  STATE.recentWindowTotalS = STATE.recentWindowTotalS * decay + dtS;
-  STATE.recentWindowCondensingS = STATE.recentWindowCondensingS * decay + (condensingNow ? dtS : 0);
-  STATE.recentDryingCompressorS = STATE.recentDryingCompressorS * decay + ((dryingActiveNow && coolingNow) ? dtS : 0);
-  STATE.recentDryingCondensingS = STATE.recentDryingCondensingS * decay + ((dryingActiveNow && condensingNow) ? dtS : 0);
-
-  if (condensingNow) STATE.condensingTotalS += dtS;
-  if (dryingActiveNow) STATE.dryingActiveTotalS += dtS;
-}
 
 function applyOutputs(nextCool, nextHeat, allowSimultaneous, reason, plateTargetC, plateC, ts, startPostCoolTracking) {
   if (typeof startPostCoolTracking !== "boolean") startPostCoolTracking = true;
@@ -514,17 +378,12 @@ function applyOutputs(nextCool, nextHeat, allowSimultaneous, reason, plateTarget
     STATE.coolOn = nextCool;
 
     if (nextCool) {
-      STATE.compressorStarts += 1;
-      STATE.coolingStartedAt = ts;
       STATE.cycleStopReason = "none";
       STATE.lastPlateEvent = "none";
       STATE.lastDecision = "cool_on:" + reason;
     } else {
       STATE.coolingLockoutUntil = ts + CONFIG.lockoutS;
       STATE.lastDecision = "cool_off:" + reason;
-      if (startPostCoolTracking) {
-        beginPostCoolInertia(ts, plateTargetC, plateC);
-      }
     }
   }
 
@@ -540,7 +399,6 @@ function controlLoop() {
   var airC = readTempC(CONFIG.localAirTempSensorId);
   var plateC = readTempC(CONFIG.localPlateTempSensorId);
 
-  updatePostCoolInertia(ts, plateC);
 
   if (!isFiniteNumber(airC)) {
     STATE.machineState = MACHINE.FAULT;
@@ -568,8 +426,6 @@ function controlLoop() {
     return;
   }
 
-  var dtS = 0;
-  if (STATE.lastLoopTs > 0 && ts > STATE.lastLoopTs) dtS = ts - STATE.lastLoopTs;
   STATE.lastLoopTs = ts;
 
   var extTempOk = externalTempFresh(ts);
@@ -582,7 +438,8 @@ function controlLoop() {
     publishFault("EXTERNAL_HUMIDITY_STALE", "info", "External humidity stale; switching to temperature-only mode");
   }
 
-  var controlTempC = extTempOk ? STATE.externalTempC : airC;
+  var internalTempC = airC;
+  var controlTempC = extTempOk ? STATE.externalTempC : internalTempC;
   var humidityRh = extHumOk ? STATE.externalHumidityRh : null;
   var mode = extHumOk ? "temp+humidity" : "temp_only";
 
@@ -685,14 +542,6 @@ function controlLoop() {
     nextState = MACHINE.IDLE;
     coolReason = "disabled";
     heatReason = "disabled";
-  } else if (STATE.postCoolActive) {
-    // Priorité forte: figer les sorties pendant l'observation d'inertie.
-    nextState = MACHINE.POST_COOL_INERTIA;
-    wantCool = false;
-    wantHeat = false;
-    allowSimultaneous = false;
-    coolReason = "inertia_lockout";
-    heatReason = "inertia_lockout";
   } else if (hardMaxActive || STATE.dryingOvertempSuspend) {
     // Priorité sécurité ambiance: surchauffe air => on suspend le séchage actif.
     nextState = MACHINE.COOLING;
@@ -713,8 +562,9 @@ function controlLoop() {
     nextState = MACHINE.DRYING_ACTIVE;
     allowSimultaneous = true;
 
-    wantHeat = computeDryingHeatDemand(airC);
-    heatReason = wantHeat ? "drying_air_setpoint" : "drying_air_hysteresis";
+    // Compensation forcée en déshumidification: si air < consigne, chauffage ON.
+    wantHeat = airC < CONFIG.dryingAirSetpointC;
+    heatReason = wantHeat ? "dehum_comp_forced_below_setpoint" : "dehum_comp_not_needed";
 
     // Priorité arrêt DRYING_ACTIVE: sécurité plaque -> cible/hystérésis plaque -> garde-fou runtime.
     if (coolingAvailable && !lockoutActive) {
@@ -761,51 +611,18 @@ function controlLoop() {
     heatReason = "no_demand";
   }
 
-  if (STATE.coolOn && wantCool) {
-    var runS = ts - STATE.coolingStartedAt;
-    if (runS >= STATE.learnedCoolMaxS) {
-      wantCool = false;
-      coolReason = "learned_runtime_limit";
-    }
-
-    if (isFiniteNumber(plateTargetC) && plateC <= plateTargetC && !STATE.learnedCoolReady) {
-      STATE.learnedCoolMaxS = clamp(runS, CONFIG.adaptiveCoolMaxMinS, CONFIG.adaptiveCoolMaxMaxS);
-      STATE.learnedCoolReady = true;
-      STATE.lastDecision = "learn_runtime_init:" + STATE.learnedCoolMaxS;
-    }
-
-    if (isFiniteNumber(plateTargetC) && plateC <= plateTargetC) {
-      STATE.lastPlateEvent = "plate_target_reached";
-    }
-  }
-
   if (STATE.coolOn && !wantCool) {
     STATE.cycleStopReason = coolReason;
   }
 
-  var condensingNow = isFiniteNumber(plateC) && isFiniteNumber(dewC) && plateC < dewC;
-  updateCondensingStats(dtS, condensingNow, STATE.coolOn, STATE.machineState === MACHINE.DRYING_ACTIVE);
-
-  var dryingCondensingPct = null;
-  if (STATE.recentDryingCompressorS > 0.1) {
-    dryingCondensingPct = 100.0 * (STATE.recentDryingCondensingS / STATE.recentDryingCompressorS);
-  }
-
-  STATE.dryingIneffective = (nextState === MACHINE.DRYING_ACTIVE) &&
-    (STATE.recentDryingCompressorS >= CONFIG.dryingIneffectiveMinCompressorS) &&
-    isFiniteNumber(dryingCondensingPct) &&
-    (dryingCondensingPct < CONFIG.dryingIneffectiveMinCondensingPct);
-  STATE.dryingIneffectiveReason = STATE.dryingIneffective ? "insufficient_condensing_under_compressor" : "none";
-
-  if (STATE.dryingIneffective && coolReason === "drying_plate_target") {
-    coolReason = "drying_ineffective";
-  }
+  var dehumActive = (nextState === MACHINE.DRYING_ACTIVE);
+  STATE.dehumActive = dehumActive;
 
   STATE.machineState = nextState;
   STATE.coolReason = coolReason;
   STATE.heatReason = heatReason;
 
-  applyOutputs(wantCool, wantHeat, allowSimultaneous, nextState + ":" + coolReason + ":" + heatReason, plateTargetC, plateC, ts, true);
+  applyOutputs(wantCool, wantHeat, allowSimultaneous, nextState + ":" + coolReason + ":" + heatReason, plateTargetC, plateC, ts, false);
   publishState(
     ts,
     airC,
@@ -864,6 +681,7 @@ function publishState(
     humidity_control_available: humidityControlAvailable,
     humidity_demand_active: humidityDemandActive,
     drying_mode_requested: dryingModeRequested,
+    dehum_active: STATE.dehumActive,
     drying_block_reason: dryingBlockReason,
     humidity_mode: humidityMode,
     dew_temp_source: dewTempSource,
@@ -871,7 +689,6 @@ function publishState(
     plate_target_c: plateTargetC,
     plate_minus_dew_c: plateMinusDewC,
     condensing_now: condensingNow,
-    drying_ineffective: STATE.dryingIneffective,
     external_temp_fresh: externalTempFresh(ts),
     external_humidity_fresh: externalHumidityFresh(ts),
     cool_on: STATE.coolOn,
@@ -881,11 +698,6 @@ function publishState(
     drying_overtemp_suspend: STATE.dryingOvertempSuspend,
     cycle_stop_reason: STATE.cycleStopReason,
     last_plate_event: STATE.lastPlateEvent,
-    last_post_cool_finalize_reason: STATE.lastPostCoolFinalizeReason,
-    last_min_plate_after_stop_c: STATE.lastPostCoolMinC,
-    overshoot_c: STATE.lastOvershootC,
-    learned_max_runtime_s: STATE.learnedCoolMaxS,
-    post_cool_active: STATE.postCoolActive,
     decision: STATE.lastDecision,
     fault: STATE.lastFaultCode,
     ts: ts
