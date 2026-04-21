@@ -33,7 +33,7 @@ Voir `docs/mqtt-topics.md` pour le détail complet.
   - `fdp_communs_cave_saucissons/thermostat/external_temperature`
   - `fdp_communs_cave_saucissons/thermostat/external_humidity`
 - Publiés :
-  - `fdp_communs_cave_saucissons/cave_saucisson/state`
+  - `fdp_communs_cave_saucissons/cave_saucisson/state` (**retained**)
   - `fdp_communs_cave_saucissons/cave_saucisson/fault`
   - `homeassistant/.../config` (MQTT Discovery retained pour entité `humidifier` HA en classe `dehumidifier` + capteurs)
 
@@ -44,6 +44,7 @@ Voir `docs/mqtt-topics.md` pour le détail complet.
 ### Home Assistant MQTT Discovery (fiabilité)
 
 Le script publie les topics discovery `homeassistant/.../config` en retained au boot.
+Le topic d'état `fdp_communs_cave_saucissons/cave_saucisson/state` est aussi publié en retained.
 
 Par défaut (`CONFIG.discoveryExtendedEnabled = false`), un **mode minimal** est utilisé pour réduire fortement la mémoire runtime Shelly :
 - `humidifier` principal (`device_class=dehumidifier`)
@@ -57,7 +58,10 @@ Un **mode étendu** reste possible (`CONFIG.discoveryExtendedEnabled = true`) av
 Pour maximiser la compatibilité HA :
 - payload discovery généré uniquement en JSON strict (`JSON.stringify`)
 - binary sensors en `payload_on="true"` / `payload_off="false"` (chaînes explicites)
-- templates défensifs avec `default(none)` sur capteurs numériques
+- entité principale `humidifier` (`device_class=dehumidifier`) exposant :
+  - état (`state_value_template` / `mode_state_template`) : `auto|off`
+  - action courante (`action_topic` + `action_template`) : `off|idle|drying`
+- templates numériques défensifs (`default(none)`) pour éviter les états invalides côté HA
 - purge explicite des retained discovery `cave_saucisson` connus au boot (minimal + étendu/obsolètes), puis republication propre
 
 Diagnostic broker optionnel (sans impact régulation) :

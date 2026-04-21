@@ -38,6 +38,7 @@ Objet HA (identifiant logique) : `cave_saucisson`
 ### 1) État global
 
 - Topic : `fdp_communs_cave_saucissons/cave_saucisson/state`
+- Retain : `true` (topic publié en retained)
 - Fréquence : toutes les `mqttPublishMs` (5000 ms par défaut) + événements importants
 - Champs clés publiés :
   - `enabled`, `target_humidity_rh`, `target_humidity_requested_rh`
@@ -123,6 +124,19 @@ Sémantique humidité explicite :
 - Entité principale publiée via composant MQTT `humidifier` avec `device_class=dehumidifier`.
 - Topic de vérité unique pour les entités : `fdp_communs_cave_saucissons/cave_saucisson/state`
 - Les entités extraient leurs champs via `value_template`/`*_template`.
+
+Paramètres clés de l'entité principale (`homeassistant/humidifier/cave_saucisson_humidifier/config`) :
+- `state_topic`: `fdp_communs_cave_saucissons/cave_saucisson/state` (retained)
+- `state_value_template`: `{% if value_json.enabled %}auto{% else %}off{% endif %}`
+- `mode_state_template`: `{% if value_json.enabled %}auto{% else %}off{% endif %}`
+- `action_topic`: `fdp_communs_cave_saucissons/cave_saucisson/state`
+- `action_template`: `{% if not value_json.enabled %}off{% elif value_json.dehum_active %}drying{% else %}idle{% endif %}`
+- `current_humidity_template`: défensif (`{{ value_json.humidity_rh | default(none) }}`) pour éviter les erreurs HA si `humidity_rh` est absent/null.
+
+Sémantique action :
+- `enabled=false` => `off`
+- `enabled=true && dehum_active=true` => `drying`
+- `enabled=true && dehum_active=false` => `idle`
 
 ### Profils discovery
 
