@@ -342,6 +342,18 @@ function setSwitch(id, on) {
   Shelly.call("Switch.Set", { id: id, on: on });
 }
 
+function forceSafeOutputsOffAtBoot() {
+  var ts = nowS();
+  setSwitch(CONFIG.coolSwitchId, false);
+  setSwitch(CONFIG.heatSwitchId, false);
+  STATE.coolOn = false;
+  STATE.heatOn = false;
+  STATE.coolingLockoutUntil = ts + CONFIG.lockoutS;
+  STATE.lastDecision = "boot_force_off_sync";
+  STATE.cycleStopReason = "boot_safe";
+  STATE.lastPlateEvent = "none";
+}
+
 function externalTempFresh(tsNow) {
   return isFiniteNumber(STATE.externalTempC) && (tsNow - STATE.externalTempTs) <= CONFIG.tempStaleS;
 }
@@ -741,7 +753,7 @@ function mqttInit() {
 }
 
 function bootstrap() {
-  applyOutputs(false, false, false, "boot_safe", null, null, nowS(), false);
+  forceSafeOutputsOffAtBoot();
   mqttInit();
   purgeDiscoveryConfigs();
   publishAllDiscoveryConfigs();

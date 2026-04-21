@@ -169,6 +169,9 @@ Consigne humidité : `target_humidity_requested_rh` (demande brute) vs `target_h
 
 - Le script privilégie toujours la sécurité thermique aux performances.
 - Le chauffage n'est jamais utilisé pour contrôler directement l'humidité.
+- Au démarrage, le script force matériellement `switch:0` (froid) et `switch:1` (chauffage) à `OFF`, puis resynchronise l'état interne des relais à `false`.
+- Un lockout compresseur est appliqué dès le boot pendant `lockoutS` secondes pour éviter une reprise immédiate après redémarrage.
+- Cette séquence de boot sûr vise explicitement la resynchronisation état logiciel / état matériel et la protection compresseur post-redémarrage.
 - Les sorties sont forcées à OFF en cas de défaut critique capteur air.
 - **Ce script ne remplace pas des sécurités matérielles** (thermostat physique, protections électriques, etc.).
 

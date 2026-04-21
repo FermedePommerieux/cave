@@ -4,6 +4,17 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.2.10] - 2026-04-21
+
+### Fixed
+- Correction du redémarrage sûr: au bootstrap, forçage matériel explicite des deux relais à `OFF` (`switch:0` froid, `switch:1` chauffage), sans dépendre de l'état interne runtime.
+- Resynchronisation immédiate de l'état logiciel des sorties (`coolOn=false`, `heatOn=false`) après forçage matériel.
+- Application du verrou compresseur dès le démarrage (`coolingLockoutUntil = now + lockoutS`) pour éviter un redémarrage immédiat du compresseur après reboot.
+- Initialisation explicite de la décision de boot (`boot_force_off_sync`) et des marqueurs d'arrêt cycle (`cycle_stop_reason=boot_safe`, `last_plate_event=none`).
+
+### Documentation
+- README, architecture et topics MQTT mis à jour pour décrire la séquence de boot sûr et l'impact opérationnel du lockout au démarrage.
+
 ## [0.2.9] - 2026-04-21
 
 ### Fixed
