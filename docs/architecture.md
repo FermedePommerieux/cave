@@ -100,6 +100,13 @@ Ordre de priorité :
 4. Verrou anti-cycles compresseur (`lockoutS`)
 5. Régulation fine thermique/hygrométrique
 
+## Séquence de démarrage sûre (bootstrap)
+
+- Au boot, le script force **physiquement** les deux relais (`switch:0` froid, `switch:1` chauffage) à `OFF` sans dépendre de l'état interne.
+- L'état runtime est ensuite resynchronisé explicitement (`coolOn=false`, `heatOn=false`) pour aligner logiciel et matériel.
+- Un verrou compresseur est armé immédiatement (`coolingLockoutUntil = now + lockoutS`) avant la reprise de la boucle de régulation.
+- La régulation normale reprend ensuite avec les mêmes règles métier; seul le bootstrap est durci pour la sûreté redémarrage.
+
 ## Modes dégradés
 
 - Température externe absente/périmée -> fallback air local.

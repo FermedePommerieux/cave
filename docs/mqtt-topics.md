@@ -97,6 +97,11 @@ Sémantique humidité explicite :
 - `drying_block_reason` : `none|humidity_stale|overtemp_suspend|no_humidity_request|no_plate_target`.
 - `humidity_mode` : `external_valid|external_stale|not_available`.
 
+Comportement observable après reboot (boot sûr) :
+- Le script force les relais froid/chauffage à `OFF` au démarrage puis applique le verrou compresseur.
+- Une demande de froid peut donc rester temporairement inhibée pendant `lockoutS` secondes après reboot.
+- Ce délai est volontaire pour protéger le compresseur; il est visible via `lockout_remaining_s` dans `.../state`.
+
 ### 2) Défauts / événements
 
 - Topic : `fdp_communs_cave_saucissons/cave_saucisson/fault`
