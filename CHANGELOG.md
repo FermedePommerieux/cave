@@ -4,6 +4,15 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.3.3] - 2026-04-23
+
+### Changed
+- Refonte de lisibilité de `src/cave_saucisson.js` sans changement fonctionnel: formatage complet, sections explicites (`helpers`, `computeDecision`, `applyDecision`, MQTT/discovery, bootstrap) et nommage clarifié des variables locales.
+- Ajout de commentaires d'exploitation directement dans le code pour expliquer les priorités de décision et les invariants sécurité appliqués en runtime.
+
+### Documentation
+- Commentaires enrichis dans le script pour décrire les fallbacks capteurs/MQTT, la gestion des latches sécurité, le verrou compresseur, et la règle de simultané chaud+froid uniquement en `DRYING_ACTIVE`.
+
 ## [0.3.2] - 2026-04-21
 
 ### Changed
