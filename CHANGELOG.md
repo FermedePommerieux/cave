@@ -4,6 +4,22 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.3.4] - 2026-04-25
+
+### Added
+- Validation de configuration au boot (`CONFIG_INVALID`) avant entrée en boucle de régulation : vérification des IDs critiques et cohérence des seuils/hystérésis principaux.
+- Publication MQTT `state` immédiate lors des transitions d'état/actionneurs (`CONFIG.mqttPublishOnTransition=true`), en complément de la cadence périodique existante.
+- Événements de fraîcheur MQTT explicites à la récupération (`EXTERNAL_TEMP_FRESH`, `EXTERNAL_HUMIDITY_FRESH`) pour une observabilité claire du retour en mode nominal.
+
+### Changed
+- Réduction du bruit sur le topic `fault`: les événements info `EXTERNAL_*_STALE` sont désormais publiés sur transition de fraîcheur, et non à chaque boucle.
+- Enrichissement de `last_plate_event` en runtime pour refléter les transitions utiles de pilotage plaque (`plate_target_reached`, `plate_above_target`, `plate_safety_blocked`).
+
+### Documentation
+- Alignement de la documentation commissioning sur le runtime actuel (suppression des sections héritées `POST_COOL_INERTIA`, apprentissage overshoot, `drying_ineffective`).
+- Suppression des références obsolètes à `CONFIG.discoveryCondensationDiagnosticsEnabled` dans README/architecture/MQTT topics.
+- Documentation ajoutée sur la publication `state` sur transition, la validation de configuration au boot et les nouveaux événements de fraîcheur MQTT.
+
 ## [0.3.3] - 2026-04-23
 
 ### Changed

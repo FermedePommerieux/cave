@@ -65,6 +65,7 @@ var CONFIG = {
   // --- Boucle / publication ---
   loopMs: 5000,
   mqttPublishMs: 5000,
+  mqttPublishOnTransition: true,
 
   // --- Discovery HA ---
   discoveryExtendedEnabled: false,
@@ -113,7 +114,12 @@ var STATE = {
 
   // État fonctionnel
   dehumActive: false,
-  lastPublishedAt: 0
+  lastPublishedAt: 0,
+  forcePublishState: false,
+
+  // Anti-spam défauts informatifs (transitions seulement)
+  externalTempWasFresh: null,
+  externalHumidityWasFresh: null
 };
 
 // ---------- Helpers génériques ----------
@@ -164,6 +170,35 @@ function dewPointC(tempC, humidityRh) {
 
 function setSwitch(switchId, on) {
   Shelly.call("Switch.Set", { id: switchId, on: on });
+}
+
+function configErrors() {
+  var errs = [];
+
+  if (CONFIG.coolSwitchId === CONFIG.heatSwitchId) errs.push("coolSwitchId must differ from heatSwitchId");
+  if (CONFIG.localAirTempSensorId === CONFIG.localPlateTempSensorId) {
+    errs.push("localAirTempSensorId must differ from localPlateTempSensorId");
+  }
+
+  if (!(CONFIG.coolOffC < CONFIG.coolOnC)) errs.push("coolOffC must be lower than coolOnC");
+  if (!(CONFIG.heatOnC < CONFIG.heatOffC)) errs.push("heatOnC must be lower than heatOffC");
+  if (!(CONFIG.plateMinOffC < CONFIG.plateMinResumeC)) {
+    errs.push("plateMinOffC must be lower than plateMinResumeC");
+  }
+  if (!(CONFIG.dryingResumeBelowHardMaxC < CONFIG.hardMaxAirC)) {
+    errs.push("dryingResumeBelowHardMaxC must be lower than hardMaxAirC");
+  }
+  if (!(CONFIG.lockoutS >= 0)) errs.push("lockoutS must be >= 0");
+  if (!(CONFIG.loopMs > 0 && CONFIG.mqttPublishMs > 0)) errs.push("loopMs/mqttPublishMs must be > 0");
+  if (!(CONFIG.humiditySetpointMinRh < CONFIG.humiditySetpointMaxRh)) {
+    errs.push("humiditySetpointMinRh must be lower than humiditySetpointMaxRh");
+  }
+  if (!(CONFIG.humiditySetpointHysteresisRh > 0)) errs.push("humiditySetpointHysteresisRh must be > 0");
+  if (!(CONFIG.plateTargetHysteresisC > 0)) errs.push("plateTargetHysteresisC must be > 0");
+  if (!(CONFIG.dryingAirHysteresisC > 0)) errs.push("dryingAirHysteresisC must be > 0");
+  if (!(CONFIG.dewTargetMarginC > 0)) errs.push("dewTargetMarginC must be > 0");
+
+  return errs;
 }
 
 // -----------------------------------------------------------------------------
@@ -397,6 +432,9 @@ function computeDecision(ts) {
 
 // Applique la décision et maintient une télémétrie cohérente.
 function applyDecision(ts, d) {
+  var changed = false;
+  var prevMachine = STATE.machineState;
+
   // Invariant sécurité #1: mutex chaud/froid hors DRYING_ACTIVE.
   if (d.wantCool && d.wantHeat && !d.allowSim) {
     d.wantHeat = false;
@@ -406,6 +444,7 @@ function applyDecision(ts, d) {
   if (STATE.coolOn !== d.wantCool) {
     setSwitch(CONFIG.coolSwitchId, d.wantCool);
     STATE.coolOn = d.wantCool;
+    changed = true;
 
     STATE.lastDecision =
       (d.wantCool ? "cool_on:" : "cool_off:") + d.state + ":" + d.coolReason + ":" + d.heatReason;
@@ -422,6 +461,7 @@ function applyDecision(ts, d) {
   if (STATE.heatOn !== d.wantHeat) {
     setSwitch(CONFIG.heatSwitchId, d.wantHeat);
     STATE.heatOn = d.wantHeat;
+    changed = true;
     STATE.lastDecision =
       (d.wantHeat ? "heat_on:" : "heat_off:") + d.state + ":" + d.coolReason + ":" + d.heatReason;
   }
@@ -432,27 +472,53 @@ function applyDecision(ts, d) {
   STATE.coolReason = d.coolReason;
   STATE.heatReason = d.heatReason;
   STATE.dehumActive = d.state === MACHINE.DRYING_ACTIVE;
+
+  if (prevMachine !== STATE.machineState) changed = true;
+
+  if (d.state === MACHINE.DRYING_ACTIVE && okNum(d.plateC) && okNum(d.plateTargetC)) {
+    if (!STATE.coolOn) {
+      STATE.lastPlateEvent = "plate_target_reached";
+    } else if (d.coolReason === "drying_plate_target") {
+      STATE.lastPlateEvent = "plate_above_target";
+    }
+  } else if (d.coolReason === "plate_safety_block") {
+    STATE.lastPlateEvent = "plate_safety_blocked";
+  }
+
+  if (CONFIG.mqttPublishOnTransition && changed) STATE.forcePublishState = true;
 }
 
 function loop() {
   var ts = nowS();
   var d = computeDecision(ts);
+  var extTempFreshNow = fresh(STATE.externalTempC, ts, STATE.externalTempTs, CONFIG.tempStaleS);
+  var extHumFreshNow = fresh(STATE.externalHumidityRh, ts, STATE.externalHumidityTs, CONFIG.humidityStaleS);
 
-  if (!d.humidityControlAvailable && okNum(STATE.externalHumidityRh)) {
+  if (STATE.externalHumidityWasFresh === null) STATE.externalHumidityWasFresh = extHumFreshNow;
+  if (STATE.externalTempWasFresh === null) STATE.externalTempWasFresh = extTempFreshNow;
+
+  if (okNum(STATE.externalHumidityRh) && STATE.externalHumidityWasFresh && !extHumFreshNow) {
     publishFault(
       "EXTERNAL_HUMIDITY_STALE",
       "info",
       "External humidity stale; switching to temperature-only mode"
     );
+  } else if (okNum(STATE.externalHumidityRh) && !STATE.externalHumidityWasFresh && extHumFreshNow) {
+    publishFault("EXTERNAL_HUMIDITY_FRESH", "info", "External humidity fresh again");
   }
 
-  if (!fresh(STATE.externalTempC, ts, STATE.externalTempTs, CONFIG.tempStaleS) && okNum(STATE.externalTempC)) {
+  if (okNum(STATE.externalTempC) && STATE.externalTempWasFresh && !extTempFreshNow) {
     publishFault(
       "EXTERNAL_TEMP_STALE",
       "info",
       "External temperature stale; fallback to local air sensor"
     );
+  } else if (okNum(STATE.externalTempC) && !STATE.externalTempWasFresh && extTempFreshNow) {
+    publishFault("EXTERNAL_TEMP_FRESH", "info", "External temperature fresh again");
   }
+
+  STATE.externalHumidityWasFresh = extHumFreshNow;
+  STATE.externalTempWasFresh = extTempFreshNow;
 
   if (d.state === MACHINE.FAULT) {
     applyDecision(ts, d);
@@ -461,7 +527,8 @@ function loop() {
     applyDecision(ts, d);
   }
 
-  publishState(ts, d);
+  publishState(ts, d, STATE.forcePublishState);
+  STATE.forcePublishState = false;
 }
 
 // ---------- MQTT publication ----------
@@ -500,8 +567,8 @@ function publishFault(code, severity, message) {
   );
 }
 
-function publishState(ts, d) {
-  if ((ts - STATE.lastPublishedAt) * 1000 < CONFIG.mqttPublishMs) return;
+function publishState(ts, d, force) {
+  if (!force && (ts - STATE.lastPublishedAt) * 1000 < CONFIG.mqttPublishMs) return;
   STATE.lastPublishedAt = ts;
 
   var hasPD = okNum(d.plateC) && okNum(d.dewC);
@@ -780,6 +847,13 @@ function bootstrap() {
   STATE.lastPlateEvent = "none";
 
   mqttInit();
+  var errs = configErrors();
+  if (errs.length > 0) {
+    STATE.machineState = MACHINE.FAULT;
+    publishFault("CONFIG_INVALID", "critical", errs.join("; "));
+    return;
+  }
+
   purgeDiscovery();
   publishDiscovery();
   publishFault("BOOT", "info", "Controller started");

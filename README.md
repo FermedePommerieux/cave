@@ -51,7 +51,6 @@ Par défaut (`CONFIG.discoveryExtendedEnabled = false`), un **mode minimal** est
 - `humidifier` principal (`device_class=dehumidifier`)
 - capteurs essentiels : `air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`
 - aucun capteur/binary sensor condensation supplémentaire en profil minimal strict
-- `CONFIG.discoveryCondensationDiagnosticsEnabled=false` par défaut (garde-fou mémoire)
 
 Un **mode étendu** reste possible (`CONFIG.discoveryExtendedEnabled = true`) avec un sous-ensemble condensation compact :
 `dew_point`, `plate_target`, `plate_minus_dew`, `condensing_now`.
@@ -163,13 +162,14 @@ Consigne humidité : `target_humidity_requested_rh` (demande brute) vs `target_h
 | `plate_too_cold_latch` | latch anti-gel plaque | `false` la plupart du temps | `true` fréquent = plaque trop froide / marge trop agressive |
 | `drying_overtemp_suspend` | DRYING suspendu par surchauffe air | `false` en régime stable | `true` fréquent = air trop haut, ajuster `hardMaxAirC`/reprise |
 | `cycle_stop_reason` | cause arrêt compresseur cycle en cours | cohérente avec mode (`drying_plate_hysteresis`, `thermal_demand`, `lockout`, etc.) | causes incohérentes ou oscillations rapides répétées |
-| `last_plate_event` | événement plaque récent | `plate_target_reached` parfois en DRYING | jamais atteint en DRYING = condensation faible |
+| `last_plate_event` | événement plaque récent | `plate_target_reached` / `plate_above_target` en DRYING, sinon `none` | `plate_safety_blocked` fréquent = marge/sonde plaque à vérifier |
 | `fault` | dernier défaut | `none` la majorité du temps | défauts répétés capteurs/MQTT |
 
 ## Sécurité
 
 - Le script privilégie toujours la sécurité thermique aux performances.
 - Le chauffage n'est jamais utilisé pour contrôler directement l'humidité.
+- Au démarrage, la configuration est validée (cohérence seuils/IDs critiques). En cas d'erreur, le script reste en défaut `CONFIG_INVALID`.
 - Au démarrage, le script force matériellement `switch:0` (froid) et `switch:1` (chauffage) à `OFF`, puis resynchronise l'état interne des relais à `false`.
 - Un lockout compresseur est appliqué dès le boot pendant `lockoutS` secondes pour éviter une reprise immédiate après redémarrage.
 - Cette séquence de boot sûr vise explicitement la resynchronisation état logiciel / état matériel et la protection compresseur post-redémarrage.
