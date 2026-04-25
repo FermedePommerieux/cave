@@ -37,7 +37,6 @@ Contraintes de robustesse discovery Home Assistant:
 - mode discovery minimal par défaut (`CONFIG.discoveryExtendedEnabled=false`) pour sobriété mémoire:
   - `humidifier` + capteurs essentiels (`air_temperature`, `plate_temperature`, `humidity`, `machine_state`, `fault`)
   - aucun `binary_sensor` ni capteur condensation additionnel en mode minimal strict
-  - `CONFIG.discoveryCondensationDiagnosticsEnabled=false` par défaut
 - mode discovery étendu optionnel (`CONFIG.discoveryExtendedEnabled=true`) réduit au noyau condensation:
   - `dew_point`, `plate_target`, `plate_minus_dew`, `condensing_now`
 - migration discovery au boot: purge explicite des retained `cave_saucisson` connus (minimal + étendu/obsolètes), puis republication du profil actif
@@ -106,6 +105,7 @@ Ordre de priorité :
 - Au boot, le script force **physiquement** les deux relais (`switch:0` froid, `switch:1` chauffage) à `OFF` sans dépendre de l'état interne.
 - L'état runtime est ensuite resynchronisé explicitement (`coolOn=false`, `heatOn=false`) pour aligner logiciel et matériel.
 - Un verrou compresseur est armé immédiatement (`coolingLockoutUntil = now + lockoutS`) avant la reprise de la boucle de régulation.
+- Avant démarrage normal, la configuration est validée (IDs distincts, seuils cohérents, hystérésis/lockout strictement positifs). En cas d'erreur: publication `CONFIG_INVALID`, pas d'entrée en boucle.
 - La régulation normale reprend ensuite avec les mêmes règles métier; seul le bootstrap est durci pour la sûreté redémarrage.
 
 ## Modes dégradés
@@ -121,6 +121,7 @@ Ordre de priorité :
 - Zéro dépendance runtime externe.
 - Décisions critiques tracées (`state` + `fault`) pour exploitation terrain.
 - Télémétrie d'arrêt simplifiée: `cycle_stop_reason` + raisons chaud/froid.
+- Publication MQTT `state` périodique + publication immédiate sur transition d'état/actionneurs (si `CONFIG.mqttPublishOnTransition=true`).
 - Statut humidité explicite dans `state`: disponibilité (`humidity_control_available`), demande (`humidity_demand_active`), requête DRYING (`drying_mode_requested`), blocage (`drying_block_reason`), mode source (`humidity_mode`).
 
 ## Observabilité condensation

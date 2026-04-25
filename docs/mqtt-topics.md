@@ -39,7 +39,7 @@ Objet HA (identifiant logique) : `cave_saucisson`
 
 - Topic : `fdp_communs_cave_saucissons/cave_saucisson/state`
 - Retain : `true` (topic publié en retained)
-- Fréquence : toutes les `mqttPublishMs` (5000 ms par défaut) + événements importants
+- Fréquence : toutes les `mqttPublishMs` (5000 ms par défaut) + publication immédiate sur transition état/actionneurs (`mqttPublishOnTransition=true`)
 - Champs clés publiés :
   - `enabled`, `target_humidity_rh`, `target_humidity_requested_rh`
   - `machine_state` : `IDLE|COOLING|HEATING|DRYING_ACTIVE|FAULT`
@@ -159,7 +159,7 @@ Entités publiées :
 - `homeassistant/sensor/cave_saucisson_machine_state/config`
 - `homeassistant/sensor/cave_saucisson_fault/config`
 
-Ce profil limite le pic mémoire au boot (moins de payloads JSON retained), n'ajoute aucune entité condensation et garde `CONFIG.discoveryCondensationDiagnosticsEnabled=false` par défaut.
+Ce profil limite le pic mémoire au boot (moins de payloads JSON retained) et n'ajoute aucune entité condensation.
 
 #### 2) Mode étendu (optionnel)
 
@@ -234,4 +234,7 @@ Chaque message contient :
 - `AIR_SENSOR_MISSING` : état `FAULT` et arrêt immédiat de tous les actionneurs.
 - `PLATE_SENSOR_MISSING` : froid interdit (chauffage toujours borné par règles température).
 - `EXTERNAL_TEMP_STALE` : info, fallback air local.
+- `EXTERNAL_TEMP_FRESH` : info, température externe de nouveau exploitable.
 - `EXTERNAL_HUMIDITY_STALE` : info, mode température seule.
+- `EXTERNAL_HUMIDITY_FRESH` : info, humidité externe de nouveau exploitable.
+- `CONFIG_INVALID` : critique, configuration incohérente détectée au boot (boucle non démarrée).

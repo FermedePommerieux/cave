@@ -70,29 +70,32 @@ Objectif: valider **sécurité**, **priorités d'état**, **télémétrie** avan
 - **Danger/bug**: chauffage piloté directement par RH sans logique consigne air.
 - **Paramètre d'abord**: `humiditySetpointHysteresisRh`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
 
-## 9) POST_COOL_INERTIA validation
-
-- **Action**: après arrêt compresseur, observer phase inertie.
-- **Télémétrie**: `machine_state`, `post_cool_active`, `cool_on`, `heat_on`.
-- **Attendu**: `POST_COOL_INERTIA` actif, sorties OFF pendant observation.
-- **Danger/bug**: redémarrage froid/chauffage pendant inertie.
-- **Paramètre d'abord**: `inertiaMaxS`, `inertiaRiseFinishDeltaC`, `postCoolStableWindowS`.
-
-## 10) Overshoot learning validation
-
-- **Action**: laisser finir un ou plusieurs cycles inertie.
-- **Télémétrie**: `last_min_plate_after_stop_c`, `overshoot_c`, `learned_max_runtime_s`, `last_post_cool_finalize_reason`.
-- **Attendu**: `overshoot_c` mis à jour après finalize; si >2.0, baisse de `learned_max_runtime_s`.
-- **Danger/bug**: `overshoot_c` figé alors pas de cible plaque valide.
-- **Paramètre d'abord**: `dewTargetMarginC`, `adaptiveCoolOvershootStepDownS`.
-
-## 11) hardMaxAirC override validation
+## 9) hardMaxAirC override validation
 
 - **Action**: faire monter `air_c` à `>= hardMaxAirC` pendant DRYING.
 - **Télémétrie**: `machine_state`, `heat_reason`, `cool_reason`, `drying_overtemp_suspend`, `heat_on`.
 - **Attendu**: suspension DRYING, priorité protection ambiance (`COOLING`), chauffage OFF.
 - **Danger/bug**: DRYING reste dominant malgré surchauffe.
 - **Paramètre d'abord**: `hardMaxAirC`, `dryingResumeBelowHardMaxC`.
+
+## 10) Publication sur transition (réactivité supervision)
+
+- **Action**: provoquer successivement `IDLE -> COOLING -> IDLE` (ou `IDLE -> HEATING -> IDLE`) en faisant franchir les seuils.
+- **Télémétrie**: timestamp MQTT des messages `.../state`, `machine_state`, `cool_on`, `heat_on`.
+- **Attendu**: publication périodique conservée + publication immédiate lors de transition d'état/actionneur.
+- **Danger/bug**: état relais changé sans nouveau message `state` rapide.
+- **Paramètre d'abord**: `mqttPublishMs`, `mqttPublishOnTransition`.
+
+## 11) Fraîcheur MQTT (anti-spam défauts info)
+
+- **Action**: injecter une T/RH externe valide, attendre péremption, puis republier des valeurs valides.
+- **Télémétrie**: topic `.../fault`, `external_temp_fresh`, `external_humidity_fresh`, `mode`.
+- **Attendu**:
+  - transition vers périmé => événement unique `EXTERNAL_*_STALE`,
+  - retour frais => événement unique `EXTERNAL_*_FRESH`,
+  - pas de spam répétitif à chaque boucle.
+- **Danger/bug**: répétition continue des mêmes défauts info sans changement d'état.
+- **Paramètre d'abord**: `tempStaleS`, `humidityStaleS`.
 
 ## 12) Critical fault validation
 
@@ -106,38 +109,32 @@ Objectif: valider **sécurité**, **priorités d'état**, **télémétrie** avan
 - **Danger/bug**: compresseur actif sans sonde air critique ou sans sécurité plaque.
 - **Paramètre d'abord**: IDs capteurs + état matériel sonde.
 
-## 13) Post-start monitoring (24–72h)
+## 13) Validation configuration au boot (`CONFIG_INVALID`)
+
+- **Action**: introduire volontairement une incohérence simple (ex: `coolOffC >= coolOnC`) puis redémarrer script.
+- **Télémétrie**: topic `.../fault`, présence/absence des cycles réguliers `.../state`.
+- **Attendu**: défaut critique `CONFIG_INVALID` publié, boucle de régulation non démarrée.
+- **Danger/bug**: démarrage en régulation malgré configuration incohérente.
+- **Paramètre d'abord**: `coolOnC/coolOffC`, `heatOnC/heatOffC`, `plateMinOffC/plateMinResumeC`, IDs capteurs/relais.
+
+## 14) Post-start monitoring (24–72h)
 
 - **Action**: suivre tendances jour/nuit.
-- **Télémétrie**: `machine_state`, `cycle_stop_reason`, `plate_too_cold_latch`, `overshoot_c`, `learned_max_runtime_s`, `fault`.
-- **Attendu**: défauts rares, runtime appris qui se stabilise, peu de latch anti-gel.
-- **Danger/bug**: `plate_safety_block` fréquent, `learned_runtime_limit` à chaque cycle, défauts capteurs/MQTT répétés.
+- **Télémétrie**: `machine_state`, `cycle_stop_reason`, `last_plate_event`, `plate_too_cold_latch`, `fault`.
+- **Attendu**: défauts rares, transitions d'état cohérentes, peu de latch anti-gel.
+- **Danger/bug**: `plate_safety_block` fréquent, `last_plate_event=plate_safety_blocked` récurrent, défauts capteurs/MQTT répétés.
 - **Paramètre d'abord**:
   - sécurité: `plateMinOffC/plateMinResumeC`, `lockoutS`
   - séchage: `target_humidity_rh` + `humiditySetpointHysteresisRh`, `dewTargetMarginC`
-  - runtime: `adaptiveCoolMax*`, `adaptiveCoolOvershootStepDownS`
-
-## 14) Validation `drying_ineffective` (transitions)
-
-- **Action**:
-  1. Forcer une demande de séchage durable (`RH` au-dessus du seuil ON).
-  2. Observer d'abord une phase où la plaque passe bien sous rosée.
-  3. Simuler ensuite un cas défavorable (plaque qui reste proche/au-dessus de rosée malgré compresseur actif).
-- **Télémétrie**: `machine_state`, `cool_on`, `condensing_now`, `drying_condensing_percent`, `drying_recent_compressor_s`, `drying_ineffective`, `drying_ineffective_reason`, `cool_reason`.
-- **Attendu**:
-  - `drying_ineffective=false` tant que la part de condensation reste suffisante.
-  - `drying_ineffective=true` seulement après dépassement de `dryingIneffectiveMinCompressorS` et si `drying_condensing_percent` < `dryingIneffectiveMinCondensingPct`.
-  - retour à `drying_ineffective=false` quand la condensation redevient suffisante.
-- **Danger/bug**: `drying_ineffective` bascule trop tôt (avant durée mini), ou reste bloqué malgré retour de condensation.
-- **Paramètre d'abord**: `dryingIneffectiveMinCompressorS`, `dryingIneffectiveMinCondensingPct`, `condensingRecentWindowS`.
+  - discovery/mémoire: `discoveryExtendedEnabled`, `discoveryDebugEnabled`.
 
 ## 15) Contrôle mémoire discovery (Shelly)
 
 - **Action**:
-  1. Démarrer avec `discoveryExtendedEnabled=false` et `discoveryCondensationDiagnosticsEnabled=true`.
+  1. Démarrer avec `discoveryExtendedEnabled=false`.
   2. Vérifier boot + publication discovery + boucle de régulation stable.
-  3. Si besoin, comparer avec `discoveryCondensationDiagnosticsEnabled=false` (profil minimal strict).
+  3. Si besoin, comparer avec `discoveryExtendedEnabled=true` (profil étendu).
 - **Télémétrie**: logs Shelly (absence d'`out of memory`), disponibilité MQTT `state/fault`.
 - **Attendu**: pas d'erreur mémoire, discovery publié, régulation inchangée.
 - **Danger/bug**: erreurs mémoire au boot ou messages MQTT manquants après publication discovery.
-- **Paramètre d'abord**: `discoveryCondensationDiagnosticsEnabled`, puis `discoveryExtendedEnabled`.
+- **Paramètre d'abord**: `discoveryExtendedEnabled`, puis `discoveryDebugEnabled`.
