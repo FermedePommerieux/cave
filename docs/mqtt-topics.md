@@ -45,6 +45,8 @@ Objet HA (identifiant logique) : `cave_saucisson`
   - `machine_state` : `IDLE|COOLING|HEATING|DRYING_ACTIVE|FAULT`
   - `cool_reason`, `heat_reason`
   - `humidity_control_available`, `humidity_demand_active`, `drying_mode_requested`, `drying_block_reason`, `humidity_mode`
+  - `drying_air_setpoint_c`, `drying_air_hysteresis_c`, `drying_heat_on_c`, `drying_heat_off_c`
+  - `rh_on_threshold`, `rh_pause_threshold`, `drying_rest_remaining_s`, `drying_decision_reason`
   - `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`, `condensing_now`
   - `dehum_active`
   - `cycle_stop_reason`, `last_plate_event`
@@ -72,6 +74,14 @@ Payload JSON (exemple) :
   "humidity_demand_active": true,
   "drying_mode_requested": true,
   "drying_block_reason": "none",
+  "drying_air_setpoint_c": 11.9,
+  "drying_air_hysteresis_c": 1.0,
+  "drying_heat_on_c": 11.4,
+  "drying_heat_off_c": 12.4,
+  "rh_on_threshold": 79.5,
+  "rh_pause_threshold": 78.3,
+  "drying_rest_remaining_s": 0,
+  "drying_decision_reason": "rh_above_on_threshold",
   "dehum_active": true,
   "humidity_mode": "external_valid",
   "dew_temp_source": "local_air",
@@ -96,6 +106,12 @@ Sémantique humidité explicite :
 - `humidity_demand_active` : demande séchage active selon hystérésis RH.
 - `drying_mode_requested` : conditions DRYING remplies avant arbitrages de priorité globaux.
 - `drying_block_reason` : `none|humidity_stale|overtemp_suspend|no_humidity_request|no_plate_target`.
+- `drying_air_setpoint_c` : consigne chauffage DRYING calculée dynamiquement (pseudo-proportionnel borné RH), **pas un PID complet**.
+- `drying_heat_on_c` / `drying_heat_off_c` : seuils ON/OFF chauffage DRYING dérivés de la consigne et de `drying_air_hysteresis_c`.
+- `rh_on_threshold` : seuil d'entrée DRYING (`target_humidity_rh + humiditySetpointHysteresisRh/2`).
+- `rh_pause_threshold` : seuil de sortie anticipée DRYING près consigne (`target_humidity_rh + dryingPauseAboveSetpointRh`, borné sous `rh_on_threshold`).
+- `drying_rest_remaining_s` : repos anti-pompage restant avant relance DRYING.
+- `drying_decision_reason` : raison de la décision RH (`rh_above_on_threshold`, `pause_near_setpoint`, `resting_after_drying`, `no_humidity_request`, `humidity_stale`, `overtemp_suspend`, ...).
 - `cool_reason` peut exposer `air_too_cold_block` quand le compresseur est bloqué par air trop froid.
 - `humidity_mode` : `external_valid|external_stale|not_available`.
 

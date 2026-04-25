@@ -65,10 +65,29 @@ Objectif: valider **sécurité**, **priorités d'état**, **télémétrie** avan
 ## 8) DRYING_ACTIVE validation
 
 - **Action**: injecter RH > `target_humidity_rh + (humiditySetpointHysteresisRh/2)` avec capteurs valides.
-- **Télémétrie**: `machine_state`, `cool_reason`, `heat_reason`, `simultaneous_mode_active`, `plate_target_c`.
-- **Attendu**: entrée `DRYING_ACTIVE`, simultané autorisé, compresseur piloté plaque, chauffage piloté consigne air dédiée.
+- **Télémétrie**: `machine_state`, `cool_reason`, `heat_reason`, `simultaneous_mode_active`, `plate_target_c`, `drying_air_setpoint_c`, `drying_decision_reason`.
+- **Attendu**: entrée `DRYING_ACTIVE`, simultané autorisé, compresseur piloté plaque, chauffage piloté par consigne air modulée (pseudo-proportionnel borné RH).
 - **Danger/bug**: chauffage piloté directement par RH sans logique consigne air.
-- **Paramètre d'abord**: `humiditySetpointHysteresisRh`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
+- **Paramètre d'abord**: `humiditySetpointHysteresisRh`, `dryingAirSetpointMinC`, `dryingAirSetpointMaxC`, `dryingAirProportionalBandRh`, `dryingAirHysteresisC`.
+
+### 8-bis) Validation anti-pompage DRYING (A→H)
+
+- **A. RH = rhSp**  
+  Attendu: `drying_air_setpoint_c = dryingAirSetpointMinC`.
+- **B. RH = rhSp + dryingAirProportionalBandRh**  
+  Attendu: `drying_air_setpoint_c = dryingAirSetpointMaxC`.
+- **C. RH intermédiaire**  
+  Attendu: interpolation linéaire croissante entre min/max.
+- **D. RH >= rh_on_threshold**  
+  Attendu: entrée `DRYING_ACTIVE` si `drying_rest_remaining_s = 0`.
+- **E. En DRYING_ACTIVE, RH <= rh_pause_threshold**  
+  Attendu: sortie DRYING, retour régulation thermique simple, `drying_decision_reason=pause_near_setpoint`, repos armé.
+- **F. Pendant `dryingMinRestS`**  
+  Attendu: pas de relance DRYING, `drying_decision_reason=resting_after_drying`.
+- **G. Après repos**  
+  Attendu: relance DRYING possible si RH remonte à `rh_on_threshold`.
+- **H. Priorité sécurités**  
+  Attendu: `hardMaxAirC`, air trop froid, plaque trop froide, RH stale, défaut air local gardent la priorité sur DRYING.
 
 ## 9) hardMaxAirC override validation
 

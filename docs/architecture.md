@@ -82,10 +82,13 @@ Contraintes de robustesse discovery Home Assistant:
 ### Mode `DRYING_ACTIVE`
 
 - Entrée : humidité valide au-dessus de `target_humidity_rh + (humiditySetpointHysteresisRh / 2)`.
-- Sortie : humidité sous `target_humidity_rh - (humiditySetpointHysteresisRh / 2)` ou humidité invalide/périmée.
+- Sortie anticipée près consigne : humidité `<= target_humidity_rh + dryingPauseAboveSetpointRh`, puis repos `dryingMinRestS` avant relance.
 - La consigne utilisateur `target_humidity_rh` est bornée par `humiditySetpointMinRh..humiditySetpointMaxRh`.
 - Le compresseur est piloté par la cible plaque autour du point de rosée (hystérésis ON/OFF simple).
-- Le chauffage en déshumidification est une compensation thermique explicite: si `airC < dryingAirSetpointC`, chauffage forcé ON (sous réserve des sécurités globales).
+- Le chauffage en déshumidification est une compensation thermique explicite avec pseudo-correcteur proportionnel borné sur consigne air:
+  - RH proche consigne -> consigne `dryingAirSetpointMinC`
+  - RH haute au-dessus consigne -> consigne interpolée jusqu'à `dryingAirSetpointMaxC`
+  - pas de PID complet (pas d'intégrale, pas de dérivée, pas d'historique complexe)
 - Simultané chauffage + compresseur autorisé **uniquement** en déshumidification active.
 - Si l'air devient trop froid (`airC <= heatOnC`), le compresseur est bloqué (latch avec reprise à `airC >= heatOffC`), y compris en `DRYING_ACTIVE`.
 - Si `airC >= hardMaxAirC`, la sécurité ambiance prime (chauffage coupé, froid de protection autorisé selon sécurité plaque + lockout).
@@ -130,3 +133,5 @@ Le `state` publie désormais des métriques orientées efficacité réelle de s�
 - `target_humidity_rh`, `target_humidity_requested_rh`
 - `dew_temp_source`, `dew_point_c`, `plate_target_c`, `plate_minus_dew_c`
 - `condensing_now`
+- diagnostic DRYING modulé: `drying_air_setpoint_c`, `drying_air_hysteresis_c`, `drying_heat_on_c`, `drying_heat_off_c`
+- seuils RH et repos: `rh_on_threshold`, `rh_pause_threshold`, `drying_rest_remaining_s`, `drying_decision_reason`
