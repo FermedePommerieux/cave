@@ -6,6 +6,9 @@ Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
 ## [0.3.4] - 2026-04-25
 
+### Fixed
+- Correction ciblée de `applyDecision`: mise à jour fiable de `cycle_stop_reason` à l'arrêt compresseur via capture de l'état précédent (`wasCoolOn`) avant mutation de `STATE.coolOn`.
+
 ### Added
 - Validation de configuration au boot (`CONFIG_INVALID`) avant entrée en boucle de régulation : vérification des IDs critiques et cohérence des seuils/hystérésis principaux.
 - Publication MQTT `state` immédiate lors des transitions d'état/actionneurs (`CONFIG.mqttPublishOnTransition=true`), en complément de la cadence périodique existante.

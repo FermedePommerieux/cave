@@ -434,6 +434,7 @@ function computeDecision(ts) {
 function applyDecision(ts, d) {
   var changed = false;
   var prevMachine = STATE.machineState;
+  var wasCoolOn = STATE.coolOn;
 
   // Invariant sécurité #1: mutex chaud/froid hors DRYING_ACTIVE.
   if (d.wantCool && d.wantHeat && !d.allowSim) {
@@ -466,7 +467,8 @@ function applyDecision(ts, d) {
       (d.wantHeat ? "heat_on:" : "heat_off:") + d.state + ":" + d.coolReason + ":" + d.heatReason;
   }
 
-  if (STATE.coolOn && !d.wantCool) STATE.cycleStopReason = d.coolReason;
+  // Capture explicite du front descendant compresseur avant mutation d'état.
+  if (wasCoolOn && !d.wantCool) STATE.cycleStopReason = d.coolReason;
 
   STATE.machineState = d.state;
   STATE.coolReason = d.coolReason;
