@@ -50,7 +50,12 @@ var CONFIG = {
 
   // --- Compensation chauffage pendant séchage ---
   dryingAirSetpointC: 12.0,
-  dryingAirHysteresisC: 0.6,
+  dryingAirSetpointMinC: 11.0,
+  dryingAirSetpointMaxC: 12.4,
+  dryingAirProportionalBandRh: 3.0,
+  dryingAirHysteresisC: 1.0,
+  dryingPauseAboveSetpointRh: 0.3,
+  dryingMinRestS: 1800,
 
   // --- Sécurité compresseur / plaque ---
   lockoutS: 180,
@@ -114,6 +119,8 @@ var STATE = {
 
   // État fonctionnel
   dehumActive: false,
+  dryingRestUntil: 0,
+  dryingDecisionReason: "none",
   lastPublishedAt: 0,
   forcePublishState: false,
 
@@ -138,6 +145,17 @@ function clamp(v, minV, maxV) {
   if (v < minV) return minV;
   if (v > maxV) return maxV;
   return v;
+}
+
+function dryingAirSetpointForRh(rh, rhSp) {
+  if (!okNum(rh) || !okNum(rhSp)) return CONFIG.dryingAirSetpointC;
+
+  var errRh = rh - rhSp;
+  if (errRh <= 0) return CONFIG.dryingAirSetpointMinC;
+
+  var ratio = clamp(errRh / CONFIG.dryingAirProportionalBandRh, 0, 1);
+  return CONFIG.dryingAirSetpointMinC +
+    ratio * (CONFIG.dryingAirSetpointMaxC - CONFIG.dryingAirSetpointMinC);
 }
 
 function readTempC(sensorId) {
@@ -195,7 +213,13 @@ function configErrors() {
   }
   if (!(CONFIG.humiditySetpointHysteresisRh > 0)) errs.push("humiditySetpointHysteresisRh must be > 0");
   if (!(CONFIG.plateTargetHysteresisC > 0)) errs.push("plateTargetHysteresisC must be > 0");
+  if (!(CONFIG.dryingAirSetpointMinC < CONFIG.dryingAirSetpointMaxC)) {
+    errs.push("dryingAirSetpointMinC must be lower than dryingAirSetpointMaxC");
+  }
+  if (!(CONFIG.dryingAirProportionalBandRh > 0)) errs.push("dryingAirProportionalBandRh must be > 0");
   if (!(CONFIG.dryingAirHysteresisC > 0)) errs.push("dryingAirHysteresisC must be > 0");
+  if (!(CONFIG.dryingPauseAboveSetpointRh > 0)) errs.push("dryingPauseAboveSetpointRh must be > 0");
+  if (!(CONFIG.dryingMinRestS >= 0)) errs.push("dryingMinRestS must be >= 0");
   if (!(CONFIG.dewTargetMarginC > 0)) errs.push("dewTargetMarginC must be > 0");
 
   return errs;
@@ -310,12 +334,40 @@ function computeDecision(ts) {
 
   var halfRh = CONFIG.humiditySetpointHysteresisRh / 2.0;
   var rhOn = rhSp + halfRh;
-  var rhOff = rhSp - halfRh;
-  if (rhOff >= rhOn) rhOff = rhOn - 0.1;
+  var rhPause = rhSp + CONFIG.dryingPauseAboveSetpointRh;
+  if (rhPause >= rhOn) rhPause = rhOn - 0.1;
+
+  var dryingAirSpC = dryingAirSetpointForRh(humidityRh, rhSp);
+  var dryingAirHystC = CONFIG.dryingAirHysteresisC;
+  var heatBandHalf = dryingAirHystC / 2.0;
+  var heatOnAt = dryingAirSpC - heatBandHalf;
+  var heatOffAt = dryingAirSpC + heatBandHalf;
 
   var dryingDemand = false;
+  STATE.dryingDecisionReason = "none";
   if (!STATE.dryingOvertempSuspend && extHumOk) {
-    dryingDemand = STATE.machineState === MACHINE.DRYING_ACTIVE ? humidityRh > rhOff : humidityRh >= rhOn;
+    if (STATE.machineState === MACHINE.DRYING_ACTIVE) {
+      dryingDemand = humidityRh > rhPause;
+      if (dryingDemand) {
+        STATE.dryingDecisionReason = "rh_above_pause_threshold";
+      } else {
+        STATE.dryingRestUntil = ts + CONFIG.dryingMinRestS;
+        STATE.dryingDecisionReason = "pause_near_setpoint";
+      }
+    } else if (ts < STATE.dryingRestUntil) {
+      dryingDemand = false;
+      STATE.dryingDecisionReason = "resting_after_drying";
+    } else if (humidityRh >= rhOn) {
+      dryingDemand = true;
+      STATE.dryingDecisionReason = "rh_above_on_threshold";
+    } else {
+      dryingDemand = false;
+      STATE.dryingDecisionReason = "no_humidity_request";
+    }
+  } else if (!extHumOk) {
+    STATE.dryingDecisionReason = "humidity_stale";
+  } else if (STATE.dryingOvertempSuspend) {
+    STATE.dryingDecisionReason = "overtemp_suspend";
   }
 
   var humidityMode = extHumOk
@@ -352,7 +404,15 @@ function computeDecision(ts) {
     humidityDemandActive: dryingDemand,
     dryingModeRequested: dryingDemand && extHumOk && okNum(plateTargetC),
     dryingBlockReason: dryingBlockReason,
-    humidityMode: humidityMode
+    humidityMode: humidityMode,
+    dryingAirSetpointC: dryingAirSpC,
+    dryingAirHysteresisC: dryingAirHystC,
+    dryingHeatOnAtC: heatOnAt,
+    dryingHeatOffAtC: heatOffAt,
+    rhOnThreshold: rhOn,
+    rhPauseThreshold: rhPause,
+    dryingRestRemainingS: Math.max(0, STATE.dryingRestUntil - ts),
+    dryingDecisionReason: STATE.dryingDecisionReason
   };
 
   if (!STATE.enabled) {
@@ -381,10 +441,6 @@ function computeDecision(ts) {
   if (dryingDemand && extHumOk && okNum(plateTargetC)) {
     d.state = MACHINE.DRYING_ACTIVE;
     d.allowSim = true; // Seul état où simultané chaud/froid est permis.
-
-    var heatBandHalf = CONFIG.dryingAirHysteresisC / 2.0;
-    var heatOnAt = CONFIG.dryingAirSetpointC - heatBandHalf;
-    var heatOffAt = CONFIG.dryingAirSetpointC + heatBandHalf;
 
     d.wantHeat = STATE.heatOn ? airC < heatOffAt : airC <= heatOnAt;
     d.heatReason = d.wantHeat
@@ -453,6 +509,7 @@ function applyDecision(ts, d) {
     // Lockout armé à chaque arrêt compresseur.
     if (!d.wantCool) {
       STATE.coolingLockoutUntil = ts + CONFIG.lockoutS;
+      if (wasCoolOn) STATE.cycleStopReason = d.coolReason;
     } else {
       STATE.cycleStopReason = "none";
       STATE.lastPlateEvent = "none";
@@ -466,9 +523,6 @@ function applyDecision(ts, d) {
     STATE.lastDecision =
       (d.wantHeat ? "heat_on:" : "heat_off:") + d.state + ":" + d.coolReason + ":" + d.heatReason;
   }
-
-  // Capture explicite du front descendant compresseur avant mutation d'état.
-  if (wasCoolOn && !d.wantCool) STATE.cycleStopReason = d.coolReason;
 
   STATE.machineState = d.state;
   STATE.coolReason = d.coolReason;
@@ -599,6 +653,14 @@ function publishState(ts, d, force) {
       humidity_demand_active: d.humidityDemandActive,
       drying_mode_requested: d.dryingModeRequested,
       drying_block_reason: d.dryingBlockReason,
+      drying_air_setpoint_c: d.dryingAirSetpointC,
+      drying_air_hysteresis_c: d.dryingAirHysteresisC,
+      drying_heat_on_c: d.dryingHeatOnAtC,
+      drying_heat_off_c: d.dryingHeatOffAtC,
+      rh_on_threshold: d.rhOnThreshold,
+      rh_pause_threshold: d.rhPauseThreshold,
+      drying_rest_remaining_s: d.dryingRestRemainingS,
+      drying_decision_reason: d.dryingDecisionReason,
       humidity_mode: d.humidityMode,
       dehum_active: STATE.dehumActive,
 

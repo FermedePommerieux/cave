@@ -87,7 +87,7 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 
 1. **First-start (obligatoire)** : `plateMinOffC`, `plateMinResumeC`, `lockoutS`, `hardMaxAirC`, `dryingResumeBelowHardMaxC`.
 2. **Régulation de base** : `coolOnC`, `coolOffC`, `heatOnC`, `heatOffC`, `heatDisableAboveC`.
-3. **Séchage** : `humiditySetpointHysteresisRh`, `humiditySetpointMinRh`, `humiditySetpointMaxRh`, `dewTargetMarginC`, `plateTargetHysteresisC`, `dryingAirSetpointC`, `dryingAirHysteresisC`.
+3. **Séchage** : `humiditySetpointHysteresisRh`, `humiditySetpointMinRh`, `humiditySetpointMaxRh`, `dewTargetMarginC`, `plateTargetHysteresisC`, `dryingAirSetpointMinC`, `dryingAirSetpointMaxC`, `dryingAirProportionalBandRh`, `dryingAirHysteresisC`, `dryingPauseAboveSetpointRh`, `dryingMinRestS`.
 4. **Validation terrain KISS** : vérifier stabilité plaque (`dewTargetMarginC`, `plateTargetHysteresisC`) et sécurité compresseur (`lockoutS`).
 
 > Règle simple: ne modifier qu'un groupe à la fois, puis observer au moins 24h de cycles.
@@ -111,8 +111,12 @@ Si Home Assistant a déjà appris d'anciens payloads discovery invalides, il fau
 | `humiditySetpointMaxRh` | 90.0 | Borne haute appliquée à la consigne utilisateur | besoin de protéger d'une consigne trop humide | besoin RH plus humide terrain | séchage trop tardif | séchage trop fréquent | Medium |
 | `dewTargetMarginC` | 1.0 | Cible plaque sous point de rosée | condensation insuffisante | plaque trop froide/overshoot | risque gel/overshoot | déshumidification faible | High |
 | `plateTargetHysteresisC` | 0.6 | Hystérésis ON/OFF compresseur en DRYING | compresseur commute trop vite | plateau trop large | humidité moins tenue finement | court-cyclage | Medium |
-| `dryingAirSetpointC` | 12.0 | Consigne air du chauffage en DRYING | air trop froid en DRYING | air trop chaud en DRYING | chauffe excessive | séchage inefficace | Medium |
-| `dryingAirHysteresisC` | 0.6 | Bande ON/OFF chauffage en DRYING | chauffage commute trop vite | oscillation air notable | fluctuations air | usure relais chauffe | Low |
+| `dryingAirSetpointMinC` | 11.0 | Consigne chauffage DRYING quand RH proche consigne | chauffe reste trop agressive près consigne RH | chauffage devient trop faible | séchage lent près consigne | pompage froid/chauffage | Medium |
+| `dryingAirSetpointMaxC` | 12.4 | Consigne chauffage DRYING quand RH est franchement trop haute | séchage trop lent RH haute | air monte trop haut en DRYING | risque surchauffe locale | déshumidification lente | Medium |
+| `dryingAirProportionalBandRh` | 3.0 | Bande RH du pseudo-correcteur proportionnel borné | chauffage DRYING monte trop vite | chauffage DRYING reste trop dur | compensation trop agressive | compensation trop molle | Medium |
+| `dryingAirHysteresisC` | 1.0 | Bande ON/OFF chauffage en DRYING | chauffage commute trop vite | oscillation air notable | fluctuations air | usure relais chauffe | Low |
+| `dryingPauseAboveSetpointRh` | 0.3 | Seuil de sortie anticipée DRYING près consigne RH | DRYING reste trop longtemps proche consigne | sortie DRYING trop précoce | cycles inutiles | séchage moins continu | Medium |
+| `dryingMinRestS` | 1800 | Temps de repos mini après sortie DRYING | re-déclenchements trop rapprochés | DRYING tarde à reprendre | RH peut dériver un peu plus haut | pompage proche consigne | Medium |
 
 ### Sécurité plaque
 
@@ -161,9 +165,19 @@ Consigne humidité : `target_humidity_requested_rh` (demande brute) vs `target_h
 | `simultaneous_mode_active` | autorisation simultané heat+cool | `true` seulement en `DRYING_ACTIVE` | `true` hors DRYING = anomalie logique |
 | `plate_too_cold_latch` | latch anti-gel plaque | `false` la plupart du temps | `true` fréquent = plaque trop froide / marge trop agressive |
 | `drying_overtemp_suspend` | DRYING suspendu par surchauffe air | `false` en régime stable | `true` fréquent = air trop haut, ajuster `hardMaxAirC`/reprise |
-| `cycle_stop_reason` | cause arrêt compresseur cycle en cours | cohérente avec mode (`drying_plate_hysteresis`, `thermal_demand`, `lockout`, etc.) | causes incohérentes ou oscillations rapides répétées |
+| `cycle_stop_reason` | cause arrêt compresseur cycle en cours | cohérente avec la vraie cause d'arrêt du cycle | causes incohérentes ou oscillations rapides répétées |
 | `last_plate_event` | événement plaque récent | `plate_target_reached` / `plate_above_target` en DRYING, sinon `none` | `plate_safety_blocked` fréquent = marge/sonde plaque à vérifier |
 | `fault` | dernier défaut | `none` la majorité du temps | défauts répétés capteurs/MQTT |
+
+### DRYING actif: pseudo-proportionnel borné (pas PID)
+
+- La logique DRYING n'implémente **pas** de PID complet (pas d'intégrale, pas de dérivée, pas d'historique complexe).
+- Le chauffage DRYING utilise une consigne air modulée instantanément par l'écart RH :
+  - RH proche `target_humidity_rh` -> consigne proche `dryingAirSetpointMinC`
+  - RH nettement au-dessus -> consigne proche `dryingAirSetpointMaxC`
+- Cette modulation fait du chauffage un **accélérateur de séchage** quand RH est haute, puis le rend plus doux près de la consigne.
+- Pour limiter le pompage près de la consigne, la sortie de `DRYING_ACTIVE` se fait à `rhPauseThreshold` (proche de la consigne), puis un repos `dryingMinRestS` évite les relances immédiates.
+- Le compresseur reste piloté par la cible plaque autour du point de rosée; les sécurités thermiques restent prioritaires.
 
 ## Sécurité
 

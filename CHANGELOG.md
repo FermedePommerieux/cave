@@ -4,6 +4,25 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 Le format s'inspire de Keep a Changelog et suit SemVer quand pertinent.
 
+## [0.3.5] - 2026-04-25
+
+### Changed
+- DRYING `DRYING_ACTIVE` ajusté pour réduire le pompage proche consigne RH via un pseudo-correcteur proportionnel borné sur la consigne de chauffage air (`dryingAirSetpointMinC..dryingAirSetpointMaxC`, bande `dryingAirProportionalBandRh`), sans PID complet (pas d'intégrale, pas de dérivée).
+- Ajout d'une sortie anticipée de `DRYING_ACTIVE` près consigne (`rh_pause_threshold`) avec repos anti-relance (`dryingMinRestS`) avant nouvelle entrée DRYING.
+- Compresseur en DRYING conservé sur pilotage plaque/point de rosée, chauffage DRYING conservé sur température air avec seuils calculés.
+
+### Fixed
+- Correction `cycle_stop_reason`: capture fiable de la raison d'arrêt compresseur via l'état précédent `wasCoolOn` au moment de l'arrêt effectif.
+
+### Added
+- Nouvelles clés `CONFIG` pour modulation/sortie DRYING: `dryingAirSetpointMinC`, `dryingAirSetpointMaxC`, `dryingAirProportionalBandRh`, `dryingPauseAboveSetpointRh`, `dryingMinRestS` (avec `dryingAirSetpointC` conservé en fallback compatibilité).
+- Nouvelles clés d'état runtime: `dryingRestUntil`, `dryingDecisionReason`.
+- Nouvelles télémétries MQTT `state`: `drying_air_setpoint_c`, `drying_air_hysteresis_c`, `drying_heat_on_c`, `drying_heat_off_c`, `rh_on_threshold`, `rh_pause_threshold`, `drying_rest_remaining_s`, `drying_decision_reason`.
+- Validation de configuration au boot étendue aux nouveaux paramètres DRYING (bornes min/max, bande proportionnelle, hystérésis, pause RH, repos minimal).
+
+### Documentation
+- README / architecture / commissioning / topics MQTT mis à jour pour décrire la modulation pseudo-proportionnelle du chauffage DRYING, la sortie anticipée près consigne et la nouvelle télémétrie de diagnostic.
+
 ## [0.3.4] - 2026-04-25
 
 ### Fixed
